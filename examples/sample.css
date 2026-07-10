@@ -1,0 +1,50 @@
+/* Sample CSS for Squeezy bundler demo */
+@import './reset.css';
+
+:root {
+  --primary-color: #FF8800;
+  --secondary-color: #FFFFFF;
+  --font-stack: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+body {
+  margin: 0px;
+  padding: 0px;
+  font-family: var(--font-stack);
+  background-color: var(--primary-color);
+  color: var(--secondary-color);
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 15px;
+}
+
+.card {
+  background-color: #FFFFFF;
+  border-radius: 8px;
+  box-shadow: 0px 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+/* Utility classes */
+.text-center {
+  text-align: center;
+}
+
+.hidden {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 10px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+}

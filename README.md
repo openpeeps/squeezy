@@ -1,28 +1,42 @@
 <p align="center">
-  <img src="https://github.com/openpeeps/PKG/blob/main/.github/logo.png" width="90px"><br>
-  OpenPeeps repository template for developing libraries,<br>projects and other cool things. 👑 Written in Nim language
+  <img src="https://raw.githubusercontent.com/openpeeps/squeezy/main/.github/squeezy.png" alt="Squeezy Logo" width="160" height="160">
+  A dead simple JavaScript and CSS bundler, validator and minifier
 </p>
 
 <p align="center">
-  <code>nimble install {PKG}</code>
+  <code>nimble install squeezy</code>
 </p>
 
 <p align="center">
-  <a href="https://openpeeps.github.io/{pkg}">API reference</a><br>
-  <img src="https://github.com/openpeeps/pistachio/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/openpeeps/pistachio/workflows/docs/badge.svg" alt="Github Actions">
+  <a href="https://openpeeps.github.io/squeezy">API reference</a><br>
+  <img src="https://github.com/openpeeps/squeezy/workflows/test/badge.svg" alt="Github Actions">  <img src="https://github.com/openpeeps/squeezy/workflows/docs/badge.svg" alt="Github Actions">
 </p>
 
 ## 😍 Key Features
-- [x] Open Source | `MIT` License
-- [x] Written in Nim language
+- High-performance minifier built with Nim lang 👑
+- Minify HTML, CSS, and JavaScript
+- Bundler for CSS and JS assets
+- Source map generation for JavaScript
+- Advanced settings (Tree shaking, Code splitting)
+- Identifier mangling for JavaScript
+- Built on top of [pkg/sweetsyntax](https://github.com/openpeeps/sweetsyntax) & [pkg/openparser/css](https://github.com/openpeeps/openparser)
 
 ## Examples
-...
+
+
+
+### Roadmap
+..
+
 
 ### ❤ Contributions & Support
-- 🐛 Found a bug? [Create a new Issue](https://github.com/openpeeps/pistachio/issues)
-- 👋 Wanna help? [Fork it!](https://github.com/openpeeps/pistachio/fork)
+- 🐛 Found a bug? [Create a new Issue](https://github.com/openpeeps/squeezy/issues)
+- 👋 Wanna help? [Fork it!](https://github.com/openpeeps/squeezy/fork)
+
+|  |  |
+|---|---|
+| <a href="https://opencode.ai/go?ref=BHMEEK48QX"><img src="https://github.com/openpeeps/pistachio/blob/main/.github/opencode.png" alt="OpenCode"></a> | Switch to **Open-Source LLMs** via OpenCode GO, choosing from a variety of powerful models such as DeepSeek, Qwen, Kimi, GLM-5, MiniMax, MiMo. 🍕 [Use our referral link to get started!](https://opencode.ai/go?ref=BHMEEK48QX)|
 
 ### 🎩 License
-MIT license. [Made by Humans from OpenPeeps](https://github.com/openpeeps).<br>
+LGPLv3 license. [Made by Humans from OpenPeeps](https://github.com/openpeeps).<br>
 Copyright OpenPeeps & Contributors &mdash; All rights reserved.
