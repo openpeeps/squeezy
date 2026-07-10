@@ -53,7 +53,7 @@ proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
 
   for (path, code) in modules:
     if opts.minify:
-      result.add(minifyJs(code))
+      result.add(minifyJs(code).code)
     else:
       result.add(code)
     result.add("\n")

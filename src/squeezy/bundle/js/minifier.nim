@@ -24,6 +24,6 @@ proc parseJsString*(code: string): OpenAstProgram =
   while p.curr.kind != tkEOF:
     result.nodes.add(parseStatement(p))
 
-proc minifyJs*(code: string, opts: JsGenOptions = defaultJsGenOpts()): string =
+proc minifyJs*(code: string, opts: JsGenOptions = defaultJsGenOpts(), sourceFile: string = ""): tuple[code: string, sourceMapRaw: string] =
   let program = parseJsString(code)
-  result = generateJs(program, opts)
+  result = generateJs(program, opts, sourceFile, code)

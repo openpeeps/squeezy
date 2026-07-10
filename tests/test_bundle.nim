@@ -1,8 +1,10 @@
-import std/[unittest, os, strutils]
+import std/[unittest, os, strutils, json, sequtils]
 import squeezy/bundle/bundler
 import squeezy/bundle/common
 import squeezy/bundle/js/codgen
 import squeezy/bundle/js/bundler as jsbundler
+import squeezy/bundle/sourcemap
+import squeezy/bundle/js/minifier as jsminifier
 import squeezy/bundle/css/bundler as cssbundler
 
 suite "JS code generator":
@@ -304,3 +306,72 @@ suite "JS mangler":
     let mangledResult = minify(code, "js", mangleOpts)
     check mangledResult.len < plainResult.len
     check "firstParam" notin mangledResult
+
+suite "Source map":
+  let sm = newSourceMap("output.js")
+  discard sm.addSource("input.js", "function greet(name) {\n  return name;\n}")
+  discard sm.addName("name")
+
+  test "encodeVLQ roundtrip":
+    for v in [0, 1, -1, 15, -15, 127, -128, 1000, -1000]:
+      let encoded = encodeVLQ(v)
+      check encoded.len > 0
+
+  test "addMapping and generate produce valid JSON":
+    let sm = newSourceMap("out.js")
+    discard sm.addSource("src.js", "var x = 1;")
+    sm.addMapping(0, 0, 0, 0, 0)
+    sm.addMapping(0, 4, 0, 4, 0)
+    let result = sm.generate()
+    let parsed = parseJson(result)
+    check parsed["version"].getInt() == 3
+    check parsed["file"].getStr() == "out.js"
+    check parsed["sources"][0].getStr() == "src.js"
+    check parsed["mappings"].getStr().len > 0
+
+  test "sourcesContent preserved":
+    let sm = newSourceMap("out.js")
+    discard sm.addSource("test.js", "let a = 1;")
+    let result = sm.generate()
+    let parsed = parseJson(result)
+    check parsed["sourcesContent"][0].getStr() == "let a = 1;"
+
+  test "generateJs returns source map when opts.sourceMap is set":
+    let code = "function greet(name) { return name; }"
+    let opts = JsGenOptions(minify: true, sourceMap: true)
+    let res = generateJs(jsminifier.parseJsString(code), opts, "test.js", code)
+    check res.code.len > 0
+    check res.sourceMapRaw.len > 0
+    let parsed = parseJson(res.sourceMapRaw)
+    check parsed["version"].getInt() == 3
+    check parsed["file"].getStr() == "test.js"
+    check parsed["sources"][0].getStr() == "test.js"
+    let names = parsed["names"].elems.mapIt(it.getStr())
+    check "name" in names
+
+  test "minifyWithSourceMap returns source map":
+    let code = "function greet(name) { return name; }"
+    let opts = BundleConfig(minify: true, sourceMap: true)
+    let res = minifyWithSourceMap(code, "js", opts, "test.js")
+    check res.code.len > 0
+    check res.sourceMapRaw.len > 0
+    let parsed = parseJson(res.sourceMapRaw)
+    check parsed["version"].getInt() == 3
+
+  test "minifyWithSourceMap sourceMap disabled returns empty map":
+    let code = "function greet(name) { return name; }"
+    let opts = BundleConfig(minify: true, sourceMap: false)
+    let res = minifyWithSourceMap(code, "js", opts, "test.js")
+    check res.code.len > 0
+    check res.sourceMapRaw.len == 0
+
+  test "sourceMap with mangling includes original names":
+    let code = "function greet(first, second) { return first + second; }"
+    let opts = JsGenOptions(minify: true, mangle: true, sourceMap: true)
+    let res = generateJs(jsminifier.parseJsString(code), opts, "test.js", code)
+    check res.code.len > 0
+    check res.sourceMapRaw.len > 0
+    let parsed = parseJson(res.sourceMapRaw)
+    let names = parsed["names"].elems.mapIt(it.getStr())
+    check "first" in names
+    check "second" in names

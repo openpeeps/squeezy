@@ -14,10 +14,10 @@
 
 ## 😍 Key Features
 - High-performance minifier built with Nim lang 👑
-- Minify HTML, CSS, and JavaScript
-- Bundler for CSS and JS assets
+- Validate, Bundle and minify CSS and JavaScript assets
 - Source map generation for JavaScript
 - Identifier mangling for JavaScript
+- Inline Minifier for HTML / CSS / JavaScript (fastest, no parsing, no validation)
 - Built on top of [pkg/sweetsyntax](https://github.com/openpeeps/sweetsyntax) & [pkg/openparser/css](https://github.com/openpeeps/openparser)
 
 ## Examples

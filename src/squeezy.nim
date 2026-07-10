@@ -17,32 +17,39 @@ when isMainModule:
   let jsPath = "examples/sample.js"
   let cssPath = "examples/sample.css"
   var mangle = false
+  var sourcemap = false
 
   var p = initOptParser()
   for kind, key, val in p.getopt():
     if kind == cmdLongOption:
       case key
       of "mangle": mangle = true
+      of "sourcemap": sourcemap = true
       else: discard
 
-  let cfg = BundleConfig(minify: true, mangle: mangle)
+  let cfg = BundleConfig(minify: true, mangle: mangle, sourceMap: sourcemap)
 
   echo "=== Squeezy Bundler ==="
   if mangle: echo "    (identifier mangling enabled)"
+  if sourcemap: echo "    (source maps enabled)"
   echo ""
 
   if fileExists(jsPath):
-    let jsMin = minifyFile(jsPath, cfg)
-    writeFile("examples/sample.min.js", jsMin)
+    let res = minifyFile(jsPath, cfg)
+    writeFile("examples/sample.min.js", res.code)
     echo "[JS]  " & jsPath & " -> examples/sample.min.js"
-    echo "      " & $jsMin.len & " bytes (was " & $readFile(jsPath).len & " bytes)"
+    echo "      " & $res.code.len & " bytes (was " & $readFile(jsPath).len & " bytes)"
+    if sourcemap and res.sourceMapRaw.len > 0:
+      writeFile("examples/sample.min.js.map", res.sourceMapRaw)
+      echo "      source map -> examples/sample.min.js.map (" & $res.sourceMapRaw.len & " bytes)"
     echo ""
   else:
     echo "[JS]  " & jsPath & " not found, skipping"
     echo ""
 
   if fileExists(cssPath):
-    let cssMin = minifyFile(cssPath, cfg)
+    let cssResult = minifyWithSourceMap(readFile(cssPath), "css", cfg, "sample.css")
+    let cssMin = cssResult.code
     writeFile("examples/sample.min.css", cssMin)
     echo "[CSS] " & cssPath & " -> examples/sample.min.css"
     echo "      " & $cssMin.len & " bytes (was " & $readFile(cssPath).len & " bytes)"

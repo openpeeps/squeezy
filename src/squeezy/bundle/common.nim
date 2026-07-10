@@ -20,6 +20,7 @@ type
     minify*: bool
     mangle*: bool
     preserveComments*: bool
+    sourceMap*: bool
 
 proc defaultConfig*: BundleConfig =
   BundleConfig(minify: true)

@@ -4,16 +4,46 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/squeezy
 
-import std/strutils
+import std/[strutils, os]
 import sweetsyntax/engine/ast
 import ../common
+import ../sourcemap
 import ./mangler
 
 type
   GenContext = object
     result: string
+    genLine, genCol: int
     opts: JsGenOptions
     mangler: Mangler
+    sourceMap: SourceMap
+
+proc add(ctx: var GenContext, s: string) =
+  ctx.result.add(s)
+  if ctx.sourceMap != nil:
+    for c in s:
+      if c == '\n':
+        inc ctx.genLine
+        ctx.genCol = 0
+      else:
+        inc ctx.genCol
+
+proc add(ctx: var GenContext, c: char) =
+  ctx.result.add(c)
+  if ctx.sourceMap != nil:
+    if c == '\n':
+      inc ctx.genLine
+      ctx.genCol = 0
+    else:
+      inc ctx.genCol
+
+proc track(ctx: var GenContext, n: Node, addName: bool = false) =
+  if ctx.sourceMap != nil and n != nil:
+    var nameIdx = -1
+    if addName and n.kind == nkIdent:
+      let name = n.name
+      nameIdx = ctx.sourceMap.addName(name)
+    ctx.sourceMap.addMapping(ctx.genLine, ctx.genCol, n.ln, n.col, 0, nameIdx)
 
 const
   PrecAssign = 0
@@ -86,7 +116,7 @@ proc genBlockStmts(ctx: var GenContext, children: seq[Node])
 proc genExprList(ctx: var GenContext, nodes: seq[Node], startIdx: int = 0) =
   for i in startIdx ..< nodes.len:
     if i > startIdx:
-      ctx.result.add(',')
+      ctx.add(',')
     genNode(ctx, nodes[i], PrecAssign, "comma")
 
 proc genThenElse(ctx: var GenContext, body: Node) =
@@ -96,87 +126,88 @@ proc genThenElse(ctx: var GenContext, body: Node) =
     genStmt(ctx, body)
 
 proc genObjLiteral(ctx: var GenContext, n: Node) =
-  ctx.result.add('{')
+  ctx.add('{')
   for i, child in n.children:
     if i > 0:
-      ctx.result.add(',')
+      ctx.add(',')
     case child.kind
     of nkColonExpr:
       let key = child.children[0]
       let val = child.children[1]
       if key.kind == nkLitString:
-        ctx.result.add(key.valStr)
+        ctx.add(key.valStr)
       elif key.kind == nkIdent:
         let keyName = key.name
         if val.kind == nkFunction:
           let fnChildren = val.children
           if fnChildren.len >= 3 and fnChildren[0].kind == nkEmpty:
             if keyName.len > 0:
-              ctx.result.add(keyName)
+              ctx.add(keyName)
             genNode(ctx, val)
           else:
-            ctx.result.add(keyName)
-            ctx.result.add(':')
+            ctx.add(keyName)
+            ctx.add(':')
             genNode(ctx, val, PrecAssign)
         else:
-          ctx.result.add(keyName)
-          ctx.result.add(':')
+          ctx.add(keyName)
+          ctx.add(':')
           genNode(ctx, val, PrecAssign)
       elif key.kind == nkBracketExpr:
-        ctx.result.add('[')
+        ctx.add('[')
         genNode(ctx, key.children[0], 0)
-        ctx.result.add(']')
-        ctx.result.add(':')
+        ctx.add(']')
+        ctx.add(':')
         genNode(ctx, val, PrecAssign)
       else:
         genNode(ctx, key)
-        ctx.result.add(':')
+        ctx.add(':')
         genNode(ctx, val, PrecAssign)
     of nkCall:
       if child.children.len > 0 and child.children[0].kind == nkIdent and
          child.children[0].name == "spread":
-        ctx.result.add("...")
+        ctx.add("...")
         if child.children.len > 1:
           genNode(ctx, child.children[1], PrecAssign)
     of nkFunction:
       genNode(ctx, child)
     else:
       genNode(ctx, child, PrecAssign)
-  ctx.result.add('}')
+  ctx.add('}')
 
 proc genFn(ctx: var GenContext, n: Node) =
+  ctx.track(n)
   let children = n.children
   let isArrow = children.len >= 1 and children[0].kind == nkEmpty
   if not isArrow:
     if children.len >= 1 and children[0].kind == nkIdent:
-      ctx.result.add("function")
+      ctx.add("function")
     if children.len >= 2 and children[1].kind == nkIdent and children[1].name == "*":
-      ctx.result.add('*')
+      ctx.add('*')
     if children.len >= 3 and children[2].kind == nkIdent:
-      ctx.result.add(' ')
-      ctx.result.add(children[2].name)
+      ctx.add(' ')
+      ctx.add(children[2].name)
     if children.len >= 4 and children[3].kind == nkIdentDefs and
        children[3].children.len > 0:
-      ctx.result.add('<')
+      ctx.add('<')
       genExprList(ctx, children[3].children, 0)
-      ctx.result.add('>')
-    ctx.result.add('(')
+      ctx.add('>')
+    ctx.add('(')
     if children.len >= 5 and children[4].kind == nkIdentDefs:
       genExprList(ctx, children[4].children, 0)
-    ctx.result.add(')')
+    ctx.add(')')
     let bodyIdx = if children.len >= 7: 6 else: children.len - 1
     if bodyIdx < children.len:
       let body = children[bodyIdx]
       if body.kind == nkBlock:
-        ctx.result.add('{')
+        ctx.add('{')
         genBlockStmts(ctx, body.children)
-        ctx.result.add('}')
+        ctx.add('}')
       elif body.kind == nkEmpty:
         discard
       else:
-        ctx.result.add('{')
+        ctx.add('{')
         genStmt(ctx, body)
-        ctx.result.add('}')
+        ctx.add('}')
   else:
     let paramsIdx = 1
     let bodyIdx = 2
@@ -185,19 +216,19 @@ proc genFn(ctx: var GenContext, n: Node) =
       if params.children.len == 1:
         genNode(ctx, params.children[0], PrecAssign)
       else:
-        ctx.result.add('(')
+        ctx.add('(')
         genExprList(ctx, params.children, 0)
-        ctx.result.add(')')
-    ctx.result.add("=>")
+        ctx.add(')')
+    ctx.add("=>")
     if bodyIdx < children.len:
       let body = children[bodyIdx]
       if body.kind == nkBlock:
         if body.children.len == 1:
           genStmt(ctx, body.children[0])
         else:
-          ctx.result.add('{')
+          ctx.add('{')
           genBlockStmts(ctx, body.children)
-          ctx.result.add('}')
+          ctx.add('}')
       elif body.kind == nkEmpty:
         discard
       else:
@@ -208,72 +239,83 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     return
   case n.kind
   of nkEmpty: discard
-  of nkNil: ctx.result.add("null")
-  of nkLitBool: ctx.result.add(if n.valBool: "true" else: "false")
-  of nkLitInt: ctx.result.add($n.valInt)
+  of nkNil:
+    ctx.track(n)
+    ctx.add("null")
+  of nkLitBool:
+    ctx.track(n)
+    ctx.add(if n.valBool: "true" else: "false")
+  of nkLitInt:
+    ctx.track(n)
+    ctx.add($n.valInt)
   of nkLitFloat:
+    ctx.track(n)
     let s = $n.valFloat
-    ctx.result.add(s)
+    ctx.add(s)
   of nkLitString:
+    ctx.track(n)
     let raw = n.valStr
     let inner = if raw.len >= 2 and (raw[0] == '"' or raw[0] == '\''):
       raw[1..^2] else: raw
-    ctx.result.add('"')
+    ctx.add('"')
     for c in inner:
       case c
-      of '\n': ctx.result.add("\\n")
-      of '\r': ctx.result.add("\\r")
-      of '\t': ctx.result.add("\\t")
-      of '"': ctx.result.add("\\\"")
-      of '\\': ctx.result.add("\\\\")
-      else: ctx.result.add(c)
-    ctx.result.add('"')
-  of nkLitBigInt: ctx.result.add(n.valBigInt & "n")
+      of '\n': ctx.add("\\n")
+      of '\r': ctx.add("\\r")
+      of '\t': ctx.add("\\t")
+      of '"': ctx.add("\\\"")
+      of '\\': ctx.add("\\\\")
+      else: ctx.add(c)
+    ctx.add('"')
+  of nkLitBigInt:
+    ctx.track(n)
+    ctx.add(n.valBigInt & "n")
   of nkIdent:
+    ctx.track(n, addName=true)
     let name = if ctx.mangler != nil: ctx.mangler.getMangled(n.name) else: n.name
-    ctx.result.add(name)
-  of nkVarTy: ctx.result.add(n.name)
+    ctx.add(name)
+  of nkVarTy: ctx.add(n.name)
   of nkRegex:
     if n.children.len > 0 and n.children[0].kind == nkLitString:
-      ctx.result.add(n.children[0].valStr)
+      ctx.add(n.children[0].valStr)
   of nkInlineComment:
     if ctx.opts.preserveComments:
-      ctx.result.add("//" & n.children[0].valStr)
+      ctx.add("//" & n.children[0].valStr)
   of nkDocComment:
     if ctx.opts.preserveComments:
-      ctx.result.add("/*" & n.children[0].valStr & "*/")
+      ctx.add("/*" & n.children[0].valStr & "*/")
   of nkPrefix:
     let opName = if n.children.len > 0 and n.children[0].kind == nkIdent: n.children[0].name else: ""
     let operand = if n.children.len > 1: n.children[1] else: nil
     if opName == "spread":
-      ctx.result.add("...")
+      ctx.add("...")
       if not operand.isNil:
         genNode(ctx, operand, PrecAssign)
     elif opName == "await":
-      ctx.result.add("await ")
+      ctx.add("await ")
       if not operand.isNil:
         genNode(ctx, operand, PrecPrefix)
     else:
       let addSpace = opName in ["typeof", "void", "delete", "new"]
-      ctx.result.add(opName)
+      ctx.add(opName)
       if addSpace and not operand.isNil:
         if operand.kind in {nkLitInt, nkLitFloat, nkLitString, nkLitBool, nkNil}:
-          ctx.result.add(' ')
+          ctx.add(' ')
         elif operand.kind == nkPrefix:
-          ctx.result.add(' ')
+          ctx.add(' ')
       if not operand.isNil:
         let wrap = operand.kind == nkInfix or (operand.kind == nkCall and opName == "new")
         if wrap:
-          ctx.result.add('(')
+          ctx.add('(')
           genNode(ctx, operand, 0)
-          ctx.result.add(')')
+          ctx.add(')')
         else:
           genNode(ctx, operand, PrecPrefix)
   of nkPostfix:
     if n.children.len >= 2:
       genNode(ctx, n.children[0], PrecPostfix, "", true)
       if n.children[1].kind == nkIdent:
-        ctx.result.add(n.children[1].name)
+        ctx.add(n.children[1].name)
   of nkInfix:
     if n.children.len >= 3 and n.children[0].kind == nkIdent:
       let op = n.children[0].name
@@ -283,7 +325,7 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       if prec >= 0:
         if op == "=" or op.endsWith("="):
           genNode(ctx, lhs, prec, op, false)
-          ctx.result.add(op)
+          ctx.add(op)
           genNode(ctx, rhs, prec, op, true)
         else:
           let wrapLhs = lhs.kind == nkInfix and lhs.children.len >= 3 and
@@ -293,36 +335,37 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
             rhs.children[0].kind == nkIdent and
             needsParens(getPrec(rhs.children[0].name), prec, op, true)
           if wrapLhs:
-            ctx.result.add('(')
+            ctx.add('(')
             genNode(ctx, lhs, 0)
-            ctx.result.add(')')
+            ctx.add(')')
           else:
             genNode(ctx, lhs, prec, op, false)
           if op == "**":
-            ctx.result.add(op)
+            ctx.add(op)
           else:
-            ctx.result.add(op)
+            ctx.add(op)
           if wrapRhs:
-            ctx.result.add('(')
+            ctx.add('(')
             genNode(ctx, rhs, 0)
-            ctx.result.add(')')
+            ctx.add(')')
           else:
             genNode(ctx, rhs, prec, op, true)
       else:
         genNode(ctx, lhs, PrecAssign)
         if op[0] in {'a'..'z', 'A'..'Z'}:
-          ctx.result.add(' ')
-          ctx.result.add(op)
-          ctx.result.add(' ')
+          ctx.add(' ')
+          ctx.add(op)
+          ctx.add(' ')
         else:
-          ctx.result.add(op)
+          ctx.add(op)
         genNode(ctx, rhs, PrecAssign)
   of nkDotExpr:
+    ctx.track(n)
     if n.children.len >= 2:
       genNode(ctx, n.children[0], PrecMember, ".")
-      ctx.result.add('.')
+      ctx.add('.')
       if n.children[1].kind == nkIdent:
-        ctx.result.add(n.children[1].name)
+        ctx.add(n.children[1].name)
       else:
         genNode(ctx, n.children[1], PrecMember)
   of nkBracketExpr:
@@ -330,132 +373,134 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       let first = n.children[0]
       if first.kind in {nkIdent, nkDotExpr, nkCall, nkBracketExpr, nkFunction, nkInfix}:
         genNode(ctx, first, PrecMember - 1, "[")
-        ctx.result.add('[')
+        ctx.add('[')
         genExprList(ctx, n.children, 1)
-        ctx.result.add(']')
+        ctx.add(']')
       else:
-        ctx.result.add('[')
+        ctx.add('[')
         genExprList(ctx, n.children, 0)
-        ctx.result.add(']')
+        ctx.add(']')
     elif n.children.len == 1:
-      ctx.result.add('[')
+      ctx.add('[')
       genNode(ctx, n.children[0], 0)
-      ctx.result.add(']')
+      ctx.add(']')
     else:
-      ctx.result.add("[]")
+      ctx.add("[]")
   of nkColonExpr:
     if n.children.len >= 2:
       genNode(ctx, n.children[0], PrecAssign)
-      ctx.result.add(':')
+      ctx.add(':')
       genNode(ctx, n.children[1], PrecAssign)
   of nkCall:
+    ctx.track(n)
     if n.children.len > 0 and n.children[0].kind == nkIdent:
       if n.children[0].name == "ternary":
         if n.children.len >= 4:
           genNode(ctx, n.children[1], PrecCond)
-          ctx.result.add('?')
+          ctx.add('?')
           genNode(ctx, n.children[2], PrecCond)
-          ctx.result.add(':')
+          ctx.add(':')
           genNode(ctx, n.children[3], PrecCond - 1)
         return
       elif n.children[0].name == "spread":
-        ctx.result.add("...")
+        ctx.add("...")
         if n.children.len > 1:
           genNode(ctx, n.children[1], PrecAssign)
         return
     if n.children.len > 0:
       genNode(ctx, n.children[0], PrecCall, "(")
-    ctx.result.add('(')
+    ctx.add('(')
     if n.children.len > 1:
       genExprList(ctx, n.children, 1)
-    ctx.result.add(')')
+    ctx.add(')')
   of nkReturn:
-    ctx.result.add("return")
+    ctx.track(n)
+    ctx.add("return")
     if n.children.len > 0:
-      ctx.result.add(' ')
+      ctx.add(' ')
       genNode(ctx, n.children[0], PrecAssign)
   of nkImport:
     if n.children.len == 0:
-      ctx.result.add("import")
+      ctx.add("import")
     elif n.children.len == 2 and n.children[0].kind == nkEmpty and
          n.children[1].kind == nkLitString:
-      ctx.result.add("import ")
+      ctx.add("import ")
       genNode(ctx, n.children[1], PrecAssign)
     elif n.children.len >= 2 and n.children[0].kind == nkEmpty and
          n.children[1].kind == nkIdentDefs:
-      ctx.result.add("import {")
+      ctx.add("import {")
       genExprList(ctx, n.children[1].children, 0)
-      ctx.result.add("}")
+      ctx.add("}")
       if n.children.len >= 3 and n.children[2].kind == nkLitString:
-        ctx.result.add(" from ")
+        ctx.add(" from ")
         genNode(ctx, n.children[2], PrecAssign)
     elif n.children.len >= 2 and n.children[0].kind == nkEmpty and
          (n.children[1].kind == nkPrefix or
           (n.children[1].kind == nkInfix and n.children[1].children.len >= 3 and
            n.children[1].children[0].kind == nkIdent and
            n.children[1].children[0].name == "as")):
-      ctx.result.add("import ")
+      ctx.add("import ")
       genNode(ctx, n.children[1], PrecAssign)
       if n.children.len >= 3 and n.children[2].kind == nkLitString:
-        ctx.result.add(" from ")
+        ctx.add(" from ")
         genNode(ctx, n.children[2], PrecAssign)
     elif n.children.len >= 2 and n.children[0].kind == nkIdent and
          n.children[1].kind == nkLitString:
-      ctx.result.add("import ")
+      ctx.add("import ")
       genNode(ctx, n.children[0], PrecAssign)
-      ctx.result.add(" from ")
+      ctx.add(" from ")
       genNode(ctx, n.children[1], PrecAssign)
     elif n.children.len >= 2 and n.children[0].kind == nkIdent:
-      ctx.result.add("import ")
+      ctx.add("import ")
       genNode(ctx, n.children[0], PrecAssign)
       if n.children.len >= 2 and n.children[1].kind == nkIdentDefs:
-        ctx.result.add(", {")
+        ctx.add(", {")
         genExprList(ctx, n.children[1].children, 0)
-        ctx.result.add("}")
+        ctx.add("}")
         if n.children.len >= 3 and n.children[2].kind == nkLitString:
-          ctx.result.add(" from ")
+          ctx.add(" from ")
           genNode(ctx, n.children[2], PrecAssign)
       elif n.children.len >= 2 and
            (n.children[1].kind == nkPrefix or
             (n.children[1].kind == nkInfix and n.children[1].children.len >= 3 and
              n.children[1].children[0].kind == nkIdent and
              n.children[1].children[0].name == "as")):
-        ctx.result.add(", ")
+        ctx.add(", ")
         genNode(ctx, n.children[1], PrecAssign)
         if n.children.len >= 3 and n.children[2].kind == nkLitString:
-          ctx.result.add(" from ")
+          ctx.add(" from ")
           genNode(ctx, n.children[2], PrecAssign)
       else:
         for i in 1 ..< n.children.len:
-          ctx.result.add(',')
-          ctx.result.add(' ')
+          ctx.add(',')
+          ctx.add(' ')
           genNode(ctx, n.children[i], PrecAssign)
     else:
-      ctx.result.add("import ")
+      ctx.add("import ")
       for i, child in n.children:
-        if i > 0: ctx.result.add(',')
-        ctx.result.add(' ')
+        if i > 0: ctx.add(',')
+        ctx.add(' ')
         genNode(ctx, child, PrecAssign)
   of nkInclude:
-    ctx.result.add("include")
+    ctx.add("include")
     if n.children.len > 0:
-      ctx.result.add(' ')
+      ctx.add(' ')
       genNode(ctx, n.children[0], PrecAssign)
   of nkFunction:
     genFn(ctx, n)
   of nkVar:
-    ctx.result.add("var")
+    ctx.add("var")
     for i, child in n.children:
-      if i > 0: ctx.result.add(',')
-      ctx.result.add(' ')
+      if i > 0: ctx.add(',')
+      ctx.add(' ')
       genNode(ctx, child, PrecAssign)
   of nkBlock:
     if isObjLiteral(n):
       genObjLiteral(ctx, n)
     else:
-      ctx.result.add('{')
+      ctx.add('{')
       genBlockStmts(ctx, n.children)
-      ctx.result.add('}')
+      ctx.add('}')
   of nkStatement:
     genStmt(ctx, n)
   of nkIdentDefs:
@@ -463,10 +508,10 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       if i == 0:
         genNode(ctx, child, PrecAssign)
       elif i == 1 and child.kind != nkEmpty:
-        ctx.result.add(':')
+        ctx.add(':')
         genNode(ctx, child, PrecAssign)
       elif i == 2 and child.kind != nkEmpty:
-        ctx.result.add('=')
+        ctx.add('=')
         genNode(ctx, child, PrecAssign)
   of nkClass, nkInterface:
     discard
@@ -480,8 +525,10 @@ proc genStmt(ctx: var GenContext, n: Node) =
     genNode(ctx, n, -1)
     return
   if n.kind != nkStatement:
+    ctx.track(n)
     genNode(ctx, n, -1, "", true)
     return
+  ctx.track(n)
   if n.children.len == 0:
     return
   let kwNode = n.children[0]
@@ -491,18 +538,18 @@ proc genStmt(ctx: var GenContext, n: Node) =
   let kw = kwNode.name
 
   if kw == "var" or kw == "let" or kw == "const":
-    ctx.result.add(kw)
+    ctx.add(kw)
     for i in 1 ..< n.children.len:
-      if i > 1: ctx.result.add(',')
-      ctx.result.add(' ')
+      if i > 1: ctx.add(',')
+      ctx.add(' ')
       genNode(ctx, n.children[i], PrecAssign)
     return
 
   if kw == "if":
-    ctx.result.add("if(")
+    ctx.add("if(")
     if n.children.len > 1:
       genNode(ctx, n.children[1], PrecAssign)
-    ctx.result.add(')')
+    ctx.add(')')
     if n.children.len > 2:
       genThenElse(ctx, n.children[2])
     var i = 3
@@ -512,26 +559,26 @@ proc genStmt(ctx: var GenContext, n: Node) =
       if clause.kind == nkBlock or (clause.kind == nkStatement and
          clause.children.len > 0 and clause.children[0].kind == nkIdent and
          clause.children[0].name == "else"):
-        ctx.result.add("else")
+        ctx.add("else")
         let body = if clause.kind == nkBlock: clause
                    elif clause.children.len > 1: clause.children[1]
                    else: Node(kind: nkEmpty)
         genThenElse(ctx, body)
         break
       else:
-        ctx.result.add("else if(")
+        ctx.add("else if(")
         genNode(ctx, clause, PrecAssign)
-        ctx.result.add(')')
+        ctx.add(')')
         if i < n.children.len:
           genThenElse(ctx, n.children[i])
           i += 1
     return
 
   if kw == "while":
-    ctx.result.add("while(")
+    ctx.add("while(")
     if n.children.len > 1:
       genNode(ctx, n.children[1], PrecAssign)
-    ctx.result.add(')')
+    ctx.add(')')
     if n.children.len > 2:
       let body = n.children[2]
       if body.kind == nkBlock:
@@ -541,21 +588,21 @@ proc genStmt(ctx: var GenContext, n: Node) =
     return
 
   if kw == "do-while":
-    ctx.result.add("do")
+    ctx.add("do")
     if n.children.len > 1:
       let body = n.children[1]
       if body.kind == nkBlock:
         genNode(ctx, body, -1)
       else:
         genStmt(ctx, body)
-    ctx.result.add("while(")
+    ctx.add("while(")
     if n.children.len > 2:
       genNode(ctx, n.children[2], PrecAssign)
-    ctx.result.add(')')
+    ctx.add(')')
     return
 
   if kw == "for":
-    ctx.result.add("for(")
+    ctx.add("for(")
     if n.children.len > 1:
       let init = n.children[1]
       if init.kind == nkStatement:
@@ -564,13 +611,13 @@ proc genStmt(ctx: var GenContext, n: Node) =
         discard
       else:
         genNode(ctx, init, PrecAssign)
-    ctx.result.add(';')
+    ctx.add(';')
     if n.children.len > 2:
       genNode(ctx, n.children[2], PrecAssign)
-    ctx.result.add(';')
+    ctx.add(';')
     if n.children.len > 3:
       genNode(ctx, n.children[3], PrecAssign)
-    ctx.result.add(')')
+    ctx.add(')')
     if n.children.len > 4:
       let body = n.children[4]
       if body.kind == nkBlock:
@@ -580,50 +627,50 @@ proc genStmt(ctx: var GenContext, n: Node) =
     return
 
   if kw == "switch":
-    ctx.result.add("switch(")
+    ctx.add("switch(")
     if n.children.len > 1:
       genNode(ctx, n.children[1], PrecAssign)
-    ctx.result.add(')')
+    ctx.add(')')
     if n.children.len > 2:
       let body = n.children[2]
-      ctx.result.add('{')
+      ctx.add('{')
       for caseNode in body.children:
         if caseNode.kind == nkStatement and caseNode.children.len > 0 and
            caseNode.children[0].kind == nkIdent:
           let caseKw = caseNode.children[0].name
           if caseKw == "case":
-            ctx.result.add("case ")
+            ctx.add("case ")
             if caseNode.children.len > 1:
               genNode(ctx, caseNode.children[1], PrecAssign)
-            ctx.result.add(':')
+            ctx.add(':')
             for i in 2 ..< caseNode.children.len:
               genStmt(ctx, caseNode.children[i])
           elif caseKw == "default":
-            ctx.result.add("default:")
+            ctx.add("default:")
             for i in 1 ..< caseNode.children.len:
               genStmt(ctx, caseNode.children[i])
         else:
           genStmt(ctx, caseNode)
-      ctx.result.add('}')
+      ctx.add('}')
     return
 
   if kw == "try":
-    ctx.result.add("try")
+    ctx.add("try")
     for i in 1 ..< n.children.len:
       let clause = n.children[i]
       if clause.kind == nkStatement and clause.children.len > 0 and
          clause.children[0].kind == nkIdent:
         let clauseKw = clause.children[0].name
         if clauseKw == "except":
-          ctx.result.add("catch")
+          ctx.add("catch")
           if clause.children.len > 2 and clause.children[1].kind == nkIdent:
-            ctx.result.add('(')
+            ctx.add('(')
             genNode(ctx, clause.children[1], PrecAssign)
-            ctx.result.add(')')
+            ctx.add(')')
           elif clause.children.len > 1:
             let catchBody = clause.children[clause.children.len - 1]
             if catchBody.kind != nkBlock:
-              ctx.result.add("(...)")
+              ctx.add("(...)")
         if clause.children.len > 0:
           let body = clause.children[clause.children.len - 1]
           if body.kind == nkBlock:
@@ -637,17 +684,17 @@ proc genStmt(ctx: var GenContext, n: Node) =
     return
 
   if kw == "class":
-    ctx.result.add("class")
+    ctx.add("class")
     if n.children.len > 1 and n.children[1].kind == nkIdent:
-      ctx.result.add(' ')
-      ctx.result.add(n.children[1].name)
+      ctx.add(' ')
+      ctx.add(n.children[1].name)
     if n.children.len > 2 and n.children[2].kind != nkEmpty:
-      ctx.result.add(" extends ")
+      ctx.add(" extends ")
       genNode(ctx, n.children[2], PrecMember)
     if n.children.len > 3:
       let body = n.children[3]
       if body.kind == nkBlock:
-        ctx.result.add('{')
+        ctx.add('{')
         for child in body.children:
           if child.kind == nkColonExpr:
             let key = child.children[0]
@@ -659,94 +706,94 @@ proc genStmt(ctx: var GenContext, n: Node) =
                 if fnName == "" or fnName == key.name:
                   genNode(ctx, val)
                 else:
-                  ctx.result.add(key.name)
-                  ctx.result.add(':')
+                  ctx.add(key.name)
+                  ctx.add(':')
                   genNode(ctx, val, PrecAssign)
               else:
-                ctx.result.add(key.name)
+                ctx.add(key.name)
                 if val.kind != nkEmpty:
-                  ctx.result.add(':')
+                  ctx.add(':')
                   genNode(ctx, val, PrecAssign)
             elif key.kind == nkLitString:
-              ctx.result.add(key.valStr)
-              ctx.result.add(':')
+              ctx.add(key.valStr)
+              ctx.add(':')
               genNode(ctx, val, PrecAssign)
-        ctx.result.add('}')
+        ctx.add('}')
     return
 
   if kw == "export":
-    ctx.result.add("export")
+    ctx.add("export")
     if n.children.len > 1:
       let inner = n.children[1]
       if inner.kind == nkIdent and inner.name == "default":
-        ctx.result.add(" default ")
+        ctx.add(" default ")
         if n.children.len > 2:
           genNode(ctx, n.children[2], PrecAssign)
       elif inner.kind == nkIdentDefs:
-        ctx.result.add(" {")
+        ctx.add(" {")
         genExprList(ctx, inner.children, 0)
-        ctx.result.add("}")
+        ctx.add("}")
         if n.children.len > 2 and n.children[2].kind == nkLitString:
-          ctx.result.add(" from ")
+          ctx.add(" from ")
           genNode(ctx, n.children[2], PrecAssign)
       elif inner.kind == nkPrefix or
            (inner.kind == nkInfix and inner.children.len >= 3 and
             inner.children[0].kind == nkIdent and
             inner.children[0].name == "as"):
-        ctx.result.add(' ')
+        ctx.add(' ')
         genNode(ctx, inner, PrecAssign)
         if n.children.len > 2 and n.children[2].kind == nkLitString:
-          ctx.result.add(" from ")
+          ctx.add(" from ")
           genNode(ctx, n.children[2], PrecAssign)
       elif inner.kind == nkIdent and inner.name == "*":
-        ctx.result.add(" *")
+        ctx.add(" *")
         if n.children.len > 2 and n.children[2].kind == nkLitString:
-          ctx.result.add(" from ")
+          ctx.add(" from ")
           genNode(ctx, n.children[2], PrecAssign)
       elif inner.kind in {nkFunction, nkStatement}:
-        ctx.result.add(' ')
+        ctx.add(' ')
         genNode(ctx, inner, PrecAssign)
       else:
-        ctx.result.add(' ')
+        ctx.add(' ')
         genNode(ctx, inner, PrecAssign)
     return
 
   if kw == "label":
     if n.children.len > 1:
       genNode(ctx, n.children[1], -1)
-    ctx.result.add(':')
+    ctx.add(':')
     if n.children.len > 2:
       genStmt(ctx, n.children[2])
     return
 
   if kw == "break":
-    ctx.result.add("break")
+    ctx.add("break")
     if n.children.len > 1:
-      ctx.result.add(' ')
+      ctx.add(' ')
       genNode(ctx, n.children[1], PrecAssign)
     return
 
   if kw == "continue":
-    ctx.result.add("continue")
+    ctx.add("continue")
     if n.children.len > 1:
-      ctx.result.add(' ')
+      ctx.add(' ')
       genNode(ctx, n.children[1], PrecAssign)
     return
 
   if kw == "throw":
-    ctx.result.add("throw")
+    ctx.add("throw")
     if n.children.len > 1:
-      ctx.result.add(' ')
+      ctx.add(' ')
       genNode(ctx, n.children[1], PrecAssign)
     return
 
   if kw == "debugger":
-    ctx.result.add("debugger")
+    ctx.add("debugger")
     return
 
   if kw == "comma":
     for i in 1 ..< n.children.len:
-      if i > 1: ctx.result.add(',')
+      if i > 1: ctx.add(',')
       genNode(ctx, n.children[i], PrecAssign)
     return
 
@@ -755,10 +802,10 @@ proc genStmt(ctx: var GenContext, n: Node) =
     return
 
   if kw == "computed":
-    ctx.result.add('[')
+    ctx.add('[')
     if n.children.len > 1:
       genNode(ctx, n.children[1], 0)
-    ctx.result.add(']')
+    ctx.add(']')
     return
 
   genNode(ctx, n, -1)
@@ -773,25 +820,33 @@ proc genBlockStmts(ctx: var GenContext, children: seq[Node]) =
                                   "class", "function", "label"]
       if not isBlockStmt:
         if ctx.result.len > 0 and ctx.result[^1] != '}':
-          ctx.result.add(';')
+          ctx.add(';')
     elif stmt.kind == nkReturn or stmt.kind == nkImport:
-      ctx.result.add(';')
+      ctx.add(';')
     elif stmt.kind == nkFunction:
       discard
     elif stmt.kind notin {nkBlock, nkEmpty, nkInlineComment, nkDocComment}:
       if ctx.result.len > 0 and ctx.result[^1] != '}':
-        ctx.result.add(';')
+        ctx.add(';')
 
-proc generateJs*(node: Node, opts: JsGenOptions): string =
+proc generateJs*(node: Node, opts: JsGenOptions, sourceFile: string = "", sourceCode: string = ""): tuple[code: string, sourceMapRaw: string] =
   var ctx = GenContext(opts: opts)
+  if opts.sourceMap and sourceFile.len > 0:
+    ctx.sourceMap = newSourceMap(changeFileExt(splitFile(sourceFile).name, ".js"))
+    discard ctx.sourceMap.addSource(sourceFile, sourceCode)
   if opts.mangle:
     ctx.mangler = newMangler()
     walkAndCollect(ctx.mangler, node)
   genNode(ctx, node, -1)
-  ctx.result
+  result.code = ctx.result
+  if ctx.sourceMap != nil:
+    result.sourceMapRaw = ctx.sourceMap.generate()
 
-proc generateJs*(program: OpenAstProgram, opts: JsGenOptions): string =
+proc generateJs*(program: OpenAstProgram, opts: JsGenOptions, sourceFile: string = "", sourceCode: string = ""): tuple[code: string, sourceMapRaw: string] =
   var ctx = GenContext(opts: opts)
+  if opts.sourceMap and sourceFile.len > 0:
+    ctx.sourceMap = newSourceMap(changeFileExt(splitFile(sourceFile).name, ".js"))
+    discard ctx.sourceMap.addSource(sourceFile, sourceCode)
   if opts.mangle:
     ctx.mangler = newMangler()
     for n in program.nodes:
@@ -805,9 +860,11 @@ proc generateJs*(program: OpenAstProgram, opts: JsGenOptions): string =
         n.children[0].name in ["if", "for", "while", "do-while", "switch", "try",
                                 "class", "function"]
       if not isBlockStmt:
-        ctx.result.add(';')
+        ctx.add(';')
     elif n.kind == nkReturn or n.kind == nkImport:
-      ctx.result.add(';')
+      ctx.add(';')
     elif n.kind notin {nkBlock, nkEmpty, nkFunction}:
-      ctx.result.add(';')
-  ctx.result
+      ctx.add(';')
+  result.code = ctx.result
+  if ctx.sourceMap != nil:
+    result.sourceMapRaw = ctx.sourceMap.generate()
