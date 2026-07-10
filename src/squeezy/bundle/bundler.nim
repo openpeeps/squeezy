@@ -1,3 +1,9 @@
+# A dead simple JavaScript and CSS validator, bundler and minifier
+#
+# (c) 2025 George Lemon | LGPL-v3 License
+#          Made by Humans from OpenPeeps
+#          https://github.com/openpeeps/squeezy
+
 import std/[os, strutils]
 import ./common
 import ./js/[minifier as jsminifier, bundler as jsbundler]
@@ -8,7 +14,8 @@ export common, validateJs, validateCss, validate
 proc minify*(code: string, ext: string, opts: BundleConfig = defaultConfig()): string =
   case ext
   of "js", "jsx", "ts", "tsx", "mjs", "cjs":
-    result = jsminifier.minifyJs(code)
+    let jsOpts = JsGenOptions(minify: opts.minify, mangle: opts.mangle, preserveComments: opts.preserveComments)
+    result = jsminifier.minifyJs(code, jsOpts)
   of "css":
     result = cssminifier.minifyCss(code, opts)
   else:

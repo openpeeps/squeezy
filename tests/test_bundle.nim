@@ -222,3 +222,85 @@ suite "JS bundler end-to-end":
     let result = jsbundler.bundleJs(tmpDir / "main.js", defaultConfig())
     removeDir(tmpDir)
     check result.len > 0
+
+suite "JS mangler":
+  let mangleOpts = BundleConfig(minify: true, mangle: true)
+
+  test "mangles multi-char function parameters":
+    let code = "function add(first, second) { return first + second; }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "function add(a,b){return a+b;}"
+
+  test "mangles local variables":
+    let code = """
+      function run() {
+        var total = 0;
+        let count = 10;
+        const limit = 100;
+        return total + count + limit;
+      }
+    """
+    let result = minify(code, "js", mangleOpts)
+    check result == "function run(){var a=0;let b=10;const c=100;return a+b+c;}"
+
+  test "preserves console and globals":
+    let code = "function log(message) { console.log(message); }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "function log(a){console.log(a);}"
+
+  test "preserves property names in dot access":
+    let code = "function get(obj) { return obj.name; }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "function get(a){return a.name;}"
+
+  test "preserves function names and exports":
+    let code = "export function calculate(first, second) { return first + second; }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "export function calculate(a,b){return a+b;};"
+
+  test "mangles for-loop variable":
+    let code = "function f() { for (var index = 0; index < 10; index++) {} }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "function f(){for(var a=0;a<10;a++){}}"
+
+  test "mangles nested function scopes":
+    let code = """
+      function outer(value) {
+        function inner(other) {
+          return value + other;
+        }
+        return inner;
+      }
+    """
+    let result = minify(code, "js", mangleOpts)
+    check result == "function outer(a){function inner(b){return a+b;}return inner;}"
+
+  test "preserves object literal keys":
+    let code = "function f() { var obj = {name: 'test'}; return obj.name; }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "function f(){var a={name:\"test\"}return a.name;}"
+
+  test "preserves known API globals":
+    let code = """
+      function f() {
+        var x = Math.random();
+        var y = JSON.stringify(x);
+        var z = Date.now();
+        return z;
+      }
+    """
+    let result = minify(code, "js", mangleOpts)
+    check result == "function f(){var a=Math.random();var b=JSON.stringify(a);var c=Date.now();return c;}"
+
+  test "single-char names stay unchanged":
+    let code = "function f(a, b) { return a + b; }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "function f(a,b){return a+b;}"
+
+  test "mangle produces shorter output":
+    let plain = BundleConfig(minify: true, mangle: false)
+    let code = "function process(firstParam, secondParam) { const result = firstParam + secondParam; return result; }"
+    let plainResult = minify(code, "js", plain)
+    let mangledResult = minify(code, "js", mangleOpts)
+    check mangledResult.len < plainResult.len
+    check "firstParam" notin mangledResult

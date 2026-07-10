@@ -1,3 +1,9 @@
+# A dead simple JavaScript and CSS validator, bundler and minifier
+#
+# (c) 2025 George Lemon | LGPL-v3 License
+#          Made by Humans from OpenPeeps
+#          https://github.com/openpeeps/squeezy
+
 import std/[strutils, sequtils]
 import pkg/openparser/css
 import ../common

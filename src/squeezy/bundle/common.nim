@@ -1,3 +1,9 @@
+# A dead simple JavaScript and CSS validator, bundler and minifier
+#
+# (c) 2025 George Lemon | LGPL-v3 License
+#          Made by Humans from OpenPeeps
+#          https://github.com/openpeeps/squeezy
+
 type
   BundleConfig* = object
     minify*: bool
@@ -12,6 +18,7 @@ type
 
   JsGenOptions* = object
     minify*: bool
+    mangle*: bool
     preserveComments*: bool
 
 proc defaultConfig*: BundleConfig =
@@ -19,3 +26,6 @@ proc defaultConfig*: BundleConfig =
 
 proc defaultJsGenOpts*: JsGenOptions =
   JsGenOptions(minify: true)
+
+proc jsGenOptsWithMangle*: JsGenOptions =
+  JsGenOptions(minify: true, mangle: true)

@@ -1,11 +1,19 @@
+# A dead simple JavaScript and CSS validator, bundler and minifier
+#
+# (c) 2025 George Lemon | LGPL-v3 License
+#          Made by Humans from OpenPeeps
+#          https://github.com/openpeeps/squeezy
+
 import std/strutils
 import sweetsyntax/engine/ast
 import ../common
+import ./mangler
 
 type
   GenContext = object
     result: string
     opts: JsGenOptions
+    mangler: Mangler
 
 const
   PrecAssign = 0
@@ -221,7 +229,9 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       else: ctx.result.add(c)
     ctx.result.add('"')
   of nkLitBigInt: ctx.result.add(n.valBigInt & "n")
-  of nkIdent: ctx.result.add(n.name)
+  of nkIdent:
+    let name = if ctx.mangler != nil: ctx.mangler.getMangled(n.name) else: n.name
+    ctx.result.add(name)
   of nkVarTy: ctx.result.add(n.name)
   of nkRegex:
     if n.children.len > 0 and n.children[0].kind == nkLitString:
@@ -311,7 +321,10 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     if n.children.len >= 2:
       genNode(ctx, n.children[0], PrecMember, ".")
       ctx.result.add('.')
-      genNode(ctx, n.children[1], PrecMember)
+      if n.children[1].kind == nkIdent:
+        ctx.result.add(n.children[1].name)
+      else:
+        genNode(ctx, n.children[1], PrecMember)
   of nkBracketExpr:
     if n.children.len >= 2:
       let first = n.children[0]
@@ -771,11 +784,19 @@ proc genBlockStmts(ctx: var GenContext, children: seq[Node]) =
 
 proc generateJs*(node: Node, opts: JsGenOptions): string =
   var ctx = GenContext(opts: opts)
+  if opts.mangle:
+    ctx.mangler = newMangler()
+    walkAndCollect(ctx.mangler, node)
   genNode(ctx, node, -1)
   ctx.result
 
 proc generateJs*(program: OpenAstProgram, opts: JsGenOptions): string =
   var ctx = GenContext(opts: opts)
+  if opts.mangle:
+    ctx.mangler = newMangler()
+    for n in program.nodes:
+      if not n.isNil:
+        walkAndCollect(ctx.mangler, n)
   for n in program.nodes:
     if n.isNil: continue
     genStmt(ctx, n)
