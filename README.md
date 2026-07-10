@@ -1,6 +1,6 @@
 <p align="center">
   <img src="https://raw.githubusercontent.com/openpeeps/squeezy/main/.github/squeezy2.png" alt="Squeezy Logo" width="120" height="120"><br>
-  A dead simple JavaScript and CSS bundler, validator and minifier
+  A dead simple JavaScript and CSS validator, bundler and minifier
 </p>
 
 <p align="center">
