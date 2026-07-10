@@ -17,12 +17,11 @@
 - Minify HTML, CSS, and JavaScript
 - Bundler for CSS and JS assets
 - Source map generation for JavaScript
-- Advanced settings (Tree shaking, Code splitting)
 - Identifier mangling for JavaScript
 - Built on top of [pkg/sweetsyntax](https://github.com/openpeeps/sweetsyntax) & [pkg/openparser/css](https://github.com/openpeeps/openparser)
 
 ## Examples
-
+Check in the [examples directory](https://github.com/openpeeps/squeezy/tree/main/examples) and the [unit tests](https://github.com/openpeeps/squeezy/tree/main/tests)
 
 
 ### Roadmap
