@@ -28,6 +28,37 @@ Check in the [examples directory](https://github.com/openpeeps/squeezy/tree/main
 ..
 
 
+## Benchmarks
+
+Comparing Squeezy vs ESBuild:
+```
+  [OK] dependencies available
+  [OK] build bench runner
+
+  Output sizes:
+
+    Original:              587043 bytes
+    squeezy-inline:        420082 bytes
+    squeezy-bundle:        391851 bytes
+    squeezy-bundle+mangle: 338729 bytes
+    esbuild:               281878 bytes
+  [OK] output size comparison + save
+
+  squeezy-inline:
+    Time (mean ± σ):      14.7 ms ±   3.8 ms    [User: 10.9 ms, System: 2.3 ms]
+    Range (min … max):    12.9 ms …  58.6 ms    168 runs
+  squeezy-bundle:
+    Time (mean ± σ):      96.7 ms ±   0.5 ms    [User: 88.4 ms, System: 6.7 ms]
+    Range (min … max):    95.7 ms …  97.6 ms    29 runs
+  squeezy-bundle+mangle:
+    Time (mean ± σ):     101.3 ms ±   0.6 ms    [User: 93.1 ms, System: 6.7 ms]
+    Range (min … max):    99.9 ms … 102.5 ms    28 runs
+  esbuild:
+    Time (mean ± σ):      53.5 ms ±   0.6 ms    [User: 44.1 ms, System: 10.4 ms]
+    Range (min … max):    52.6 ms …  55.2 ms    52 runs
+  [OK] hyperfine benchmark
+```
+
 ### ❤ Contributions & Support
 - 🐛 Found a bug? [Create a new Issue](https://github.com/openpeeps/squeezy/issues)
 - 👋 Wanna help? [Fork it!](https://github.com/openpeeps/squeezy/fork)

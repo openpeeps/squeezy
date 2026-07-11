@@ -12,7 +12,7 @@ import ./validator
 export common, validateJs, validateCss, validate
 
 type
-  MinifyResult* = object
+  MinifyResult* = ref object
     code*: string
     sourceMapRaw*: string
 

@@ -26,7 +26,7 @@ type
     sourceMap: SourceMap
     depth: int
 
-proc add(ctx: var GenContext, s: string) =
+proc add(ctx: var GenContext, s: string) {.inline.} =
   if ctx.result.len > 0 and ctx.result[^1] in IdentChars and s.len > 0 and s[0] in IdentChars:
     ctx.result.add(' ')
   ctx.result.add(s)
@@ -38,7 +38,7 @@ proc add(ctx: var GenContext, s: string) =
       else:
         inc ctx.genCol
 
-proc add(ctx: var GenContext, c: char) =
+proc add(ctx: var GenContext, c: char) {.inline.} =
   ctx.result.add(c)
   if ctx.sourceMap != nil:
     if c == '\n':
@@ -47,7 +47,7 @@ proc add(ctx: var GenContext, c: char) =
     else:
       inc ctx.genCol
 
-proc track(ctx: var GenContext, n: Node, addName: bool = false) =
+proc track(ctx: var GenContext, n: Node, addName: bool = false) {.inline.} =
   if ctx.sourceMap != nil and n != nil:
     var nameIdx = -1
     if addName and n.kind == nkIdent:
@@ -563,16 +563,16 @@ proc genStmt(ctx: var GenContext, n: Node) =
     return
   let kw = kwNode.name
 
-  if kw == "var" or kw == "let" or kw == "const":
+  case kw
+  of "var", "let", "const":
     ctx.add(kw)
     for i in 1 ..< n.children.len:
       if i > 1: ctx.add(',')
       if n.children[i].isNil: continue
       ctx.add(' ')
       genNode(ctx, n.children[i], PrecAssign)
-    return
 
-  if kw == "if":
+  of "if":
     ctx.add("if(")
     if n.children.len > 1 and not n.children[1].isNil:
       genNode(ctx, n.children[1], PrecAssign)
@@ -601,9 +601,8 @@ proc genStmt(ctx: var GenContext, n: Node) =
         if i < n.children.len:
           genThenElse(ctx, n.children[i])
           i += 1
-    return
 
-  if kw == "while":
+  of "while":
     ctx.add("while(")
     if n.children.len > 1:
       genNode(ctx, n.children[1], PrecAssign)
@@ -614,9 +613,8 @@ proc genStmt(ctx: var GenContext, n: Node) =
         genNode(ctx, body, -1)
       elif not body.isNil:
         genStmt(ctx, body)
-    return
 
-  if kw == "do-while":
+  of "do-while":
     ctx.add("do")
     if n.children.len > 1:
       let body = n.children[1]
@@ -628,9 +626,8 @@ proc genStmt(ctx: var GenContext, n: Node) =
     if n.children.len > 2:
       genNode(ctx, n.children[2], PrecAssign)
     ctx.add(')')
-    return
 
-  if kw == "for":
+  of "for":
     ctx.add("for(")
     if n.children.len > 1:
       let init = n.children[1]
@@ -653,9 +650,8 @@ proc genStmt(ctx: var GenContext, n: Node) =
         genNode(ctx, body, -1)
       elif not body.isNil:
         genStmt(ctx, body)
-    return
 
-  if kw == "switch":
+  of "switch":
     ctx.add("switch(")
     if n.children.len > 1:
       genNode(ctx, n.children[1], PrecAssign)
@@ -667,30 +663,33 @@ proc genStmt(ctx: var GenContext, n: Node) =
         if caseNode.kind == nkStatement and caseNode.children.len > 0 and
            caseNode.children[0].kind == nkIdent:
           let caseKw = caseNode.children[0].name
-          if caseKw == "case":
+          case caseKw
+          of "case":
             ctx.add("case ")
             if caseNode.children.len > 1:
               genNode(ctx, caseNode.children[1], PrecAssign)
             ctx.add(':')
             for i in 2 ..< caseNode.children.len:
               genStmt(ctx, caseNode.children[i])
-          elif caseKw == "default":
+          of "default":
             ctx.add("default:")
             for i in 1 ..< caseNode.children.len:
               genStmt(ctx, caseNode.children[i])
+          else:
+            discard
         else:
           genStmt(ctx, caseNode)
       ctx.add('}')
-    return
 
-  if kw == "try":
+  of "try":
     ctx.add("try")
     for i in 1 ..< n.children.len:
       let clause = n.children[i]
       if clause.kind == nkStatement and clause.children.len > 0 and
          clause.children[0].kind == nkIdent:
         let clauseKw = clause.children[0].name
-        if clauseKw == "except":
+        case clauseKw
+        of "except":
           ctx.add("catch")
           if clause.children.len > 2 and clause.children[1].kind == nkIdent:
             ctx.add('(')
@@ -700,6 +699,8 @@ proc genStmt(ctx: var GenContext, n: Node) =
             let catchBody = clause.children[clause.children.len - 1]
             if catchBody.kind != nkBlock:
               ctx.add("(...)")
+        else:
+          discard
         if clause.children.len > 0:
           let body = clause.children[clause.children.len - 1]
           if body.kind == nkBlock:
@@ -710,9 +711,8 @@ proc genStmt(ctx: var GenContext, n: Node) =
         genNode(ctx, clause, -1)
       else:
         genStmt(ctx, clause)
-    return
 
-  if kw == "class":
+  of "class":
     ctx.add("class")
     if n.children.len > 1 and n.children[1].kind == nkIdent:
       ctx.add(' ')
@@ -748,9 +748,8 @@ proc genStmt(ctx: var GenContext, n: Node) =
               ctx.add(':')
               genNode(ctx, val, PrecAssign)
         ctx.add('}')
-    return
 
-  if kw == "export":
+  of "export":
     ctx.add("export")
     if n.children.len > 1:
       let inner = n.children[1]
@@ -785,59 +784,51 @@ proc genStmt(ctx: var GenContext, n: Node) =
       else:
         ctx.add(' ')
         genNode(ctx, inner, PrecAssign)
-    return
 
-  if kw == "label":
+  of "label":
     if n.children.len > 1:
       genNode(ctx, n.children[1], -1)
     ctx.add(':')
     if n.children.len > 2:
       genStmt(ctx, n.children[2])
-    return
 
-  if kw == "break":
+  of "break":
     ctx.add("break")
     if n.children.len > 1:
       ctx.add(' ')
       genNode(ctx, n.children[1], PrecAssign)
-    return
 
-  if kw == "continue":
+  of "continue":
     ctx.add("continue")
     if n.children.len > 1:
       ctx.add(' ')
       genNode(ctx, n.children[1], PrecAssign)
-    return
 
-  if kw == "throw":
+  of "throw":
     ctx.add("throw")
     if n.children.len > 1:
       ctx.add(' ')
       genNode(ctx, n.children[1], PrecAssign)
-    return
 
-  if kw == "debugger":
+  of "debugger":
     ctx.add("debugger")
-    return
 
-  if kw == "comma":
+  of "comma":
     for i in 1 ..< n.children.len:
       if i > 1: ctx.add(',')
       genNode(ctx, n.children[i], PrecAssign)
-    return
 
-  if kw == "function":
+  of "function":
     genNode(ctx, n.children[1], -1)
-    return
 
-  if kw == "computed":
+  of "computed":
     ctx.add('[')
     if n.children.len > 1:
       genNode(ctx, n.children[1], 0)
     ctx.add(']')
-    return
 
-  genNode(ctx, n, -1)
+  else:
+    genNode(ctx, n, -1)
 
 proc genBlockStmts(ctx: var GenContext, children: seq[Node]) =
   for stmt in children:
