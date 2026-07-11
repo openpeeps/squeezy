@@ -1,0 +1,10 @@
+nimTitle	sourcemap	squeezy/bundle/sourcemap.html	module squeezy/bundle/sourcemap		0
+nim	SegmentEntry	squeezy/bundle/sourcemap.html#SegmentEntry	object SegmentEntry		4
+nim	SourceMap	squeezy/bundle/sourcemap.html#SourceMap	type SourceMap		11
+nim	newSourceMap	squeezy/bundle/sourcemap.html#newSourceMap,string	proc newSourceMap(file: string): SourceMap		19
+nim	addSource	squeezy/bundle/sourcemap.html#addSource,SourceMap,string,string	proc addSource(sm: SourceMap; source: string; content: string): int		22
+nim	addName	squeezy/bundle/sourcemap.html#addName,SourceMap,string	proc addName(sm: SourceMap; name: string): int		27
+nim	addMapping	squeezy/bundle/sourcemap.html#addMapping,SourceMap,int,int,int,int,int,int	proc addMapping(sm: SourceMap; genLine, genCol, srcLine, srcCol, sourceIdx: int;\n           nameIdx: int = -1)		38
+nim	encodeVLQ	squeezy/bundle/sourcemap.html#encodeVLQ,int	proc encodeVLQ(value: int): string		47
+nim	generateMappings	squeezy/bundle/sourcemap.html#generateMappings,SourceMap	proc generateMappings(sm: SourceMap): string		57
+nim	generate	squeezy/bundle/sourcemap.html#generate,SourceMap,string	proc generate(sm: SourceMap; sourceRoot: string = ""): string		81

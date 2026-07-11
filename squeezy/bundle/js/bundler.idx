@@ -1,0 +1,2 @@
+nimTitle	bundler	squeezy/bundle/js/bundler.html	module squeezy/bundle/js/bundler		0
+nim	bundleJs	squeezy/bundle/js/bundler.html#bundleJs,string,BundleConfig	proc bundleJs(entryPoint: string; opts: BundleConfig): string		27

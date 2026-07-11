@@ -1,0 +1,2 @@
+nimTitle	minifier	squeezy/bundle/css/minifier.html	module squeezy/bundle/css/minifier		0
+nim	minifyCss	squeezy/bundle/css/minifier.html#minifyCss,string,BundleConfig	proc minifyCss(code: string; opts: BundleConfig = defaultConfig()): string		92

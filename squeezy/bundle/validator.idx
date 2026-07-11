@@ -1,0 +1,4 @@
+nimTitle	validator	squeezy/bundle/validator.html	module squeezy/bundle/validator		0
+nim	validateJs	squeezy/bundle/validator.html#validateJs,string	proc validateJs(code: string): seq[string]		13
+nim	validateCss	squeezy/bundle/validator.html#validateCss,string	proc validateCss(code: string): seq[string]		28
+nim	validate	squeezy/bundle/validator.html#validate,string,string	proc validate(code: string; fileType: string): seq[string]		40

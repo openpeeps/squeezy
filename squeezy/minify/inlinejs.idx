@@ -1,0 +1,4 @@
+nimTitle	inlinejs	squeezy/minify/inlinejs.html	module squeezy/minify/inlinejs		0
+nim	JSMinifier	squeezy/minify/inlinejs.html#JSMinifier	object JSMinifier		15
+nim	minify	squeezy/minify/inlinejs.html#minify,JSMinifier,string	proc minify(m: JSMinifier; code: string): string		33
+nim	minifyInlineJS	squeezy/minify/inlinejs.html#minifyInlineJS,sinkstring	proc minifyInlineJS(code: sink string): owned string		138

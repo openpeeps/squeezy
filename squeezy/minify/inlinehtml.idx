@@ -1,0 +1,3 @@
+nimTitle	inlinehtml	squeezy/minify/inlinehtml.html	module squeezy/minify/inlinehtml		0
+nim	HtmlMinifier	squeezy/minify/inlinehtml.html#HtmlMinifier	object HtmlMinifier		12
+nim	minify	squeezy/minify/inlinehtml.html#minify,HtmlMinifier,string	proc minify(m: HtmlMinifier; code: string): string		17

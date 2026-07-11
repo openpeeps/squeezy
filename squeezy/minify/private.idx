@@ -1,0 +1,4 @@
+nimTitle	private	squeezy/minify/private.html	module squeezy/minify/private		0
+nim	Minifier	squeezy/minify/private.html#Minifier	object Minifier		9
+nim	isIdentChar	squeezy/minify/private.html#isIdentChar,char	proc isIdentChar(c: char): bool		16
+nim	needsSpace	squeezy/minify/private.html#needsSpace,char,char	proc needsSpace(a, b: char): bool		20

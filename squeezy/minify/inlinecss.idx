@@ -1,0 +1,4 @@
+nimTitle	inlinecss	squeezy/minify/inlinecss.html	module squeezy/minify/inlinecss		0
+nim	CssMinifier	squeezy/minify/inlinecss.html#CssMinifier	object CssMinifier		11
+nim	minify	squeezy/minify/inlinecss.html#minify,CssMinifier,string	proc minify(m: CssMinifier; css: string): string		14
+nim	minifyInlineCSS	squeezy/minify/inlinecss.html#minifyInlineCSS,sinkstring	proc minifyInlineCSS(css: sink string): owned string		179

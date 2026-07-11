@@ -1,0 +1,5 @@
+nimTitle	codgen	squeezy/bundle/js/codgen.html	module squeezy/bundle/js/codgen		0
+nim	debugDepth	squeezy/bundle/js/codgen.html#debugDepth	var debugDepth		15
+nim	generateJs	squeezy/bundle/js/codgen.html#generateJs,Node,JsGenOptions,string,string	proc generateJs(node: Node; opts: JsGenOptions; sourceFile: string = "";\n           sourceCode: string = ""): tuple[code: string, sourceMapRaw: string]		861
+nim	generateJs	squeezy/bundle/js/codgen.html#generateJs,OpenAstProgram,JsGenOptions,string,string	proc generateJs(program: OpenAstProgram; opts: JsGenOptions; sourceFile: string = "";\n           sourceCode: string = ""): tuple[code: string, sourceMapRaw: string]		874
+nimgrp	generatejs	squeezy/bundle/js/codgen.html#generateJs-procs-all	proc		861

@@ -1,0 +1,9 @@
+nimTitle	mangler	squeezy/bundle/js/mangler.html	module squeezy/bundle/js/mangler		0
+nim	Mangler	squeezy/bundle/js/mangler.html#Mangler	type Mangler		11
+nim	ReservedWords	squeezy/bundle/js/mangler.html#ReservedWords	const ReservedWords		16
+nim	KnownGlobals	squeezy/bundle/js/mangler.html#KnownGlobals	const KnownGlobals		28
+nim	newMangler	squeezy/bundle/js/mangler.html#newMangler	proc newMangler(): Mangler		52
+nim	addName	squeezy/bundle/js/mangler.html#addName,Mangler,string	proc addName(m: Mangler; name: string)		55
+nim	getMangled	squeezy/bundle/js/mangler.html#getMangled,Mangler,string	proc getMangled(m: Mangler; name: string): string		69
+nim	dumpMangler	squeezy/bundle/js/mangler.html#dumpMangler,Mangler	proc dumpMangler(m: Mangler): string		74
+nim	walkAndCollect	squeezy/bundle/js/mangler.html#walkAndCollect,Mangler,Node	proc walkAndCollect(m: Mangler; n: Node)		79

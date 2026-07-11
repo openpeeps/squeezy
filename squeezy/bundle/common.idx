@@ -1,0 +1,6 @@
+nimTitle	common	squeezy/bundle/common.html	module squeezy/bundle/common		0
+nim	BundleConfig	squeezy/bundle/common.html#BundleConfig	object BundleConfig		8
+nim	JsGenOptions	squeezy/bundle/common.html#JsGenOptions	object JsGenOptions		19
+nim	defaultConfig	squeezy/bundle/common.html#defaultConfig	proc defaultConfig(): BundleConfig		25
+nim	defaultJsGenOpts	squeezy/bundle/common.html#defaultJsGenOpts	proc defaultJsGenOpts(): JsGenOptions		28
+nim	jsGenOptsWithMangle	squeezy/bundle/common.html#jsGenOptsWithMangle	proc jsGenOptsWithMangle(): JsGenOptions		31

@@ -1,0 +1,7 @@
+nimTitle	bundler	squeezy/bundle/bundler.html	module squeezy/bundle/bundler		0
+nim	MinifyResult	squeezy/bundle/bundler.html#MinifyResult	object MinifyResult		15
+nim	minify	squeezy/bundle/bundler.html#minify,string,string,BundleConfig	proc minify(code: string; ext: string; opts: BundleConfig = defaultConfig()): string		19
+nim	minifyWithSourceMap	squeezy/bundle/bundler.html#minifyWithSourceMap,string,string,BundleConfig,string	proc minifyWithSourceMap(code: string; ext: string;\n                    opts: BundleConfig = defaultConfig();\n                    sourceFile: string = ""): MinifyResult		29
+nim	bundle	squeezy/bundle/bundler.html#bundle,string,BundleConfig	proc bundle(entryPoint: string; opts: BundleConfig = defaultConfig()): string		40
+nim	minifyFile	squeezy/bundle/bundler.html#minifyFile,string,BundleConfig	proc minifyFile(path: string; opts: BundleConfig = defaultConfig()): MinifyResult		50
+nim	minifyAndBundle	squeezy/bundle/bundler.html#minifyAndBundle,string,string,BundleConfig	proc minifyAndBundle(entryPoint: string; outputPath: string;\n                opts: BundleConfig = defaultConfig()): string		55
