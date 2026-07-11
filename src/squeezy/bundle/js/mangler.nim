@@ -81,42 +81,49 @@ proc walkAndCollect*(m: Mangler, n: Node) =
   case n.kind
   of nkFunction:
     let children = n.children
-    if children.len >= 5 and children[4].kind == nkIdentDefs:
+    if children.len >= 5 and not children[4].isNil and children[4].kind == nkIdentDefs:
       for param in children[4].children:
+        if param.isNil: continue
         if param.kind == nkIdent:
           addName(m, param.name)
         elif param.kind == nkIdentDefs and param.children.len > 0 and
-             param.children[0].kind == nkIdent:
+             not param.children[0].isNil and param.children[0].kind == nkIdent:
           addName(m, param.children[0].name)
-    if children.len >= 7:
+    if children.len >= 7 and not children[6].isNil:
       walkAndCollect(m, children[6])
   of nkStatement:
-    if n.children.len > 0 and n.children[0].kind == nkIdent and
+    if n.children.len > 0 and not n.children[0].isNil and
+       n.children[0].kind == nkIdent and
        n.children[0].name in ["var", "let", "const"]:
       for i in 1 ..< n.children.len:
         let def = n.children[i]
+        if def.isNil: continue
         if def.kind == nkIdentDefs and def.children.len > 0 and
-           def.children[0].kind == nkIdent:
+           not def.children[0].isNil and def.children[0].kind == nkIdent:
           addName(m, def.children[0].name)
         elif def.kind == nkIdent:
           addName(m, def.name)
-    elif n.children.len > 0 and n.children[0].kind == nkIdent and
+    elif n.children.len > 0 and not n.children[0].isNil and
+         n.children[0].kind == nkIdent and
          n.children[0].name == "for":
-      if n.children.len > 1:
+      if n.children.len > 1 and not n.children[1].isNil:
         let init = n.children[1]
         if init.kind == nkStatement and init.children.len > 0 and
-           init.children[0].kind == nkIdent and
+           not init.children[0].isNil and init.children[0].kind == nkIdent and
            init.children[0].name in ["var", "let", "const"]:
           for i in 1 ..< init.children.len:
             let def = init.children[i]
+            if def.isNil: continue
             if def.kind == nkIdentDefs and def.children.len > 0 and
-               def.children[0].kind == nkIdent:
+               not def.children[0].isNil and def.children[0].kind == nkIdent:
               addName(m, def.children[0].name)
     else:
-      if n.kind notin LeafNodes:
+      if n.kind notin LeafNodes and n.kind != nkNil:
         for child in n.children:
-          walkAndCollect(m, child)
+          if not child.isNil:
+            walkAndCollect(m, child)
   else:
-    if n.kind notin LeafNodes:
+    if n.kind notin LeafNodes and n.kind != nkNil:
       for child in n.children:
-        walkAndCollect(m, child)
+        if not child.isNil:
+          walkAndCollect(m, child)

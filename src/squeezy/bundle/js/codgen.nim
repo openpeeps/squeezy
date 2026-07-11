@@ -9,6 +9,13 @@ import sweetsyntax/engine/ast
 import ../common
 import ../sourcemap
 import ./mangler
+when defined(sweetSyntaxDebug):
+  import pkg/openparser/json
+
+var debugDepth*: int
+
+const
+  IdentChars = {'a'..'z', 'A'..'Z', '0'..'9', '_', '$'}
 
 type
   GenContext = object
@@ -17,8 +24,11 @@ type
     opts: JsGenOptions
     mangler: Mangler
     sourceMap: SourceMap
+    depth: int
 
 proc add(ctx: var GenContext, s: string) =
+  if ctx.result.len > 0 and ctx.result[^1] in IdentChars and s.len > 0 and s[0] in IdentChars:
+    ctx.result.add(' ')
   ctx.result.add(s)
   if ctx.sourceMap != nil:
     for c in s:
@@ -104,8 +114,10 @@ proc needsParens(childPrec, parentPrec: int, parentOp: string, isLhs: bool): boo
 
 proc isObjLiteral(n: Node): bool =
   n.kind == nkBlock and n.children.len > 0 and
+    not n.children[0].isNil and
     (n.children[0].kind == nkColonExpr or
      (n.children[0].kind == nkCall and n.children[0].children.len > 0 and
+      not n.children[0].children[0].isNil and
       n.children[0].children[0].kind == nkIdent and
       n.children[0].children[0].name == "spread"))
 
@@ -115,11 +127,14 @@ proc genBlockStmts(ctx: var GenContext, children: seq[Node])
 
 proc genExprList(ctx: var GenContext, nodes: seq[Node], startIdx: int = 0) =
   for i in startIdx ..< nodes.len:
+    let n = nodes[i]
+    if n.isNil: continue
     if i > startIdx:
       ctx.add(',')
-    genNode(ctx, nodes[i], PrecAssign, "comma")
+    genNode(ctx, n, PrecAssign, "comma")
 
 proc genThenElse(ctx: var GenContext, body: Node) =
+  if body.isNil: return
   if body.kind == nkBlock:
     genNode(ctx, body, -1)
   else:
@@ -128,12 +143,15 @@ proc genThenElse(ctx: var GenContext, body: Node) =
 proc genObjLiteral(ctx: var GenContext, n: Node) =
   ctx.add('{')
   for i, child in n.children:
+    if child.isNil: continue
     if i > 0:
       ctx.add(',')
     case child.kind
     of nkColonExpr:
+      if child.children.len < 2: continue
       let key = child.children[0]
       let val = child.children[1]
+      if key.isNil or val.isNil: continue
       if key.kind == nkLitString:
         ctx.add(key.valStr)
       elif key.kind == nkIdent:
@@ -177,43 +195,44 @@ proc genObjLiteral(ctx: var GenContext, n: Node) =
 proc genFn(ctx: var GenContext, n: Node) =
   ctx.track(n)
   let children = n.children
-  let isArrow = children.len >= 1 and children[0].kind == nkEmpty
+  let isArrow = children.len >= 1 and not children[0].isNil and children[0].kind == nkEmpty
   if not isArrow:
-    if children.len >= 1 and children[0].kind == nkIdent:
+    if children.len >= 1 and not children[0].isNil and children[0].kind == nkIdent:
       ctx.add("function")
-    if children.len >= 2 and children[1].kind == nkIdent and children[1].name == "*":
+    if children.len >= 2 and not children[1].isNil and children[1].kind == nkIdent and children[1].name == "*":
       ctx.add('*')
-    if children.len >= 3 and children[2].kind == nkIdent:
+    if children.len >= 3 and not children[2].isNil and children[2].kind == nkIdent:
       ctx.add(' ')
       ctx.add(children[2].name)
-    if children.len >= 4 and children[3].kind == nkIdentDefs and
+    if children.len >= 4 and not children[3].isNil and children[3].kind == nkIdentDefs and
        children[3].children.len > 0:
       ctx.add('<')
       genExprList(ctx, children[3].children, 0)
       ctx.add('>')
     ctx.add('(')
-    if children.len >= 5 and children[4].kind == nkIdentDefs:
+    if children.len >= 5 and not children[4].isNil and children[4].kind == nkIdentDefs:
       genExprList(ctx, children[4].children, 0)
     ctx.add(')')
     let bodyIdx = if children.len >= 7: 6 else: children.len - 1
     if bodyIdx < children.len:
       let body = children[bodyIdx]
-      if body.kind == nkBlock:
+      if not body.isNil and body.kind == nkBlock:
         ctx.add('{')
         genBlockStmts(ctx, body.children)
         ctx.add('}')
-      elif body.kind == nkEmpty:
+      elif not body.isNil and body.kind == nkEmpty:
         discard
-      else:
+      elif not body.isNil:
         ctx.add('{')
         genStmt(ctx, body)
         ctx.add('}')
   else:
     let paramsIdx = 1
     let bodyIdx = 2
-    if paramsIdx < children.len and children[paramsIdx].kind == nkIdentDefs:
+    if paramsIdx < children.len and not children[paramsIdx].isNil and
+       children[paramsIdx].kind == nkIdentDefs:
       let params = children[paramsIdx]
-      if params.children.len == 1:
+      if params.children.len == 1 and not params.children[0].isNil:
         genNode(ctx, params.children[0], PrecAssign)
       else:
         ctx.add('(')
@@ -222,21 +241,27 @@ proc genFn(ctx: var GenContext, n: Node) =
     ctx.add("=>")
     if bodyIdx < children.len:
       let body = children[bodyIdx]
-      if body.kind == nkBlock:
-        if body.children.len == 1:
+      if not body.isNil and body.kind == nkBlock:
+        if body.children.len == 1 and not body.children[0].isNil:
           genStmt(ctx, body.children[0])
         else:
           ctx.add('{')
           genBlockStmts(ctx, body.children)
           ctx.add('}')
-      elif body.kind == nkEmpty:
+      elif not body.isNil and body.kind == nkEmpty:
         discard
-      else:
+      elif not body.isNil:
         genNode(ctx, body, PrecAssign)
 
 proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: string = "", isLhs: bool = true) =
   if n.isNil:
     return
+  when defined(sweetSyntaxDebug):
+    inc ctx.depth
+    if ctx.depth > 500 and ctx.depth mod 100 == 0:
+      let start = ctx.result.len - min(ctx.result.len, 80)
+      let tail = ctx.result[start..^1]
+      stderr.writeLine("depth=" & $ctx.depth & " kind=" & $n.kind & " code=" & tail)
   case n.kind
   of nkEmpty: discard
   of nkNil:
@@ -505,6 +530,7 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     genStmt(ctx, n)
   of nkIdentDefs:
     for i, child in n.children:
+      if child.isNil: continue
       if i == 0:
         genNode(ctx, child, PrecAssign)
       elif i == 1 and child.kind != nkEmpty:
@@ -532,7 +558,7 @@ proc genStmt(ctx: var GenContext, n: Node) =
   if n.children.len == 0:
     return
   let kwNode = n.children[0]
-  if kwNode.kind != nkIdent:
+  if kwNode.isNil or kwNode.kind != nkIdent:
     genNode(ctx, n, -1)
     return
   let kw = kwNode.name
@@ -541,23 +567,26 @@ proc genStmt(ctx: var GenContext, n: Node) =
     ctx.add(kw)
     for i in 1 ..< n.children.len:
       if i > 1: ctx.add(',')
+      if n.children[i].isNil: continue
       ctx.add(' ')
       genNode(ctx, n.children[i], PrecAssign)
     return
 
   if kw == "if":
     ctx.add("if(")
-    if n.children.len > 1:
+    if n.children.len > 1 and not n.children[1].isNil:
       genNode(ctx, n.children[1], PrecAssign)
     ctx.add(')')
-    if n.children.len > 2:
+    if n.children.len > 2 and not n.children[2].isNil:
       genThenElse(ctx, n.children[2])
     var i = 3
     while i < n.children.len:
       let clause = n.children[i]
       i += 1
+      if clause.isNil: continue
       if clause.kind == nkBlock or (clause.kind == nkStatement and
-         clause.children.len > 0 and clause.children[0].kind == nkIdent and
+         clause.children.len > 0 and not clause.children[0].isNil and
+         clause.children[0].kind == nkIdent and
          clause.children[0].name == "else"):
         ctx.add("else")
         let body = if clause.kind == nkBlock: clause
@@ -581,9 +610,9 @@ proc genStmt(ctx: var GenContext, n: Node) =
     ctx.add(')')
     if n.children.len > 2:
       let body = n.children[2]
-      if body.kind == nkBlock:
+      if not body.isNil and body.kind == nkBlock:
         genNode(ctx, body, -1)
-      else:
+      elif not body.isNil:
         genStmt(ctx, body)
     return
 
@@ -591,9 +620,9 @@ proc genStmt(ctx: var GenContext, n: Node) =
     ctx.add("do")
     if n.children.len > 1:
       let body = n.children[1]
-      if body.kind == nkBlock:
+      if not body.isNil and body.kind == nkBlock:
         genNode(ctx, body, -1)
-      else:
+      elif not body.isNil:
         genStmt(ctx, body)
     ctx.add("while(")
     if n.children.len > 2:
@@ -605,24 +634,24 @@ proc genStmt(ctx: var GenContext, n: Node) =
     ctx.add("for(")
     if n.children.len > 1:
       let init = n.children[1]
-      if init.kind == nkStatement:
+      if not init.isNil and init.kind == nkStatement:
         genStmt(ctx, init)
-      elif init.kind == nkEmpty:
+      elif not init.isNil and init.kind == nkEmpty:
         discard
-      else:
+      elif not init.isNil:
         genNode(ctx, init, PrecAssign)
     ctx.add(';')
-    if n.children.len > 2:
+    if n.children.len > 2 and not n.children[2].isNil:
       genNode(ctx, n.children[2], PrecAssign)
     ctx.add(';')
-    if n.children.len > 3:
+    if n.children.len > 3 and not n.children[3].isNil:
       genNode(ctx, n.children[3], PrecAssign)
     ctx.add(')')
     if n.children.len > 4:
       let body = n.children[4]
-      if body.kind == nkBlock:
+      if not body.isNil and body.kind == nkBlock:
         genNode(ctx, body, -1)
-      else:
+      elif not body.isNil:
         genStmt(ctx, body)
     return
 
