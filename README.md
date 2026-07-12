@@ -30,7 +30,7 @@ Check in the [examples directory](https://github.com/openpeeps/squeezy/tree/main
 
 ## Benchmarks
 
-Comparing Squeezy vs ESBuild:
+Comparing Squeezy vs ESBuild (on d3.js library ~ 20k lines)
 ```
   [OK] dependencies available
   [OK] build bench runner
