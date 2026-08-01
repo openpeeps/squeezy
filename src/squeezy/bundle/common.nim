@@ -5,6 +5,14 @@
 #          https://github.com/openpeeps/squeezy
 
 type
+  OutputFormat* = enum
+    fmtES = "es"        ## ES modules — native import/export preserved
+    fmtCJS = "cjs"      ## CommonJS — module.exports / exports
+    fmtIIFE = "iife"    ## Browser IIFE — var NAME = (function(exports){ ... })({})
+    fmtUMD = "umd"      ## Universal — CJS/AMD/global factory wrapper
+    fmtAMD = "amd"      ## AMD — define(['exports'], function(exports){ ... })
+    fmtSystem = "system" ## SystemJS — System.register([], function(exports){ ... })
+
   BundleConfig* = object
     minify*: bool
     mangle*: bool
@@ -15,12 +23,20 @@ type
     sourceMap*: bool
     entryPoint*: string
     outputPath*: string
+    format*: OutputFormat
+      ## Output wrapper format for the bundled JS. Defaults to fmtES.
+    moduleName*: string
+      ## Global/module name for iife/umd wrappers.
+      ## Defaults to the entry file basename when empty.
 
   JsGenOptions* = object
     minify*: bool
     mangle*: bool
     preserveComments*: bool
     sourceMap*: bool
+    stripExports*: bool
+      ## When true, codegen drops import/export statements and emits
+      ## declarations without the `export` keyword (for wrapped formats).
 
 proc defaultConfig*: BundleConfig =
   BundleConfig(minify: true)

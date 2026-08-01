@@ -225,6 +225,66 @@ suite "JS bundler end-to-end":
     removeDir(tmpDir)
     check result.len > 0
 
+suite "JS bundle output formats":
+  let tmpDir = getTempDir() / "squeezy_test_formats"
+  createDir(tmpDir)
+  writeFile(tmpDir / "utils.js", "export function add(a,b){return a+b}")
+  writeFile(tmpDir / "main.js", "import {add} from './utils.js'; export function mul(a,b){return a*b}")
+
+  test "es format keeps native statements":
+    let opts = BundleConfig(minify: true, format: fmtES)
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check result.contains("import {add}")
+    check result.contains("export function mul")
+
+  test "cjs wrapper":
+    let opts = BundleConfig(minify: true, format: fmtCJS)
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check result.startsWith("'use strict';")
+    check result.contains("exports.mul=mul;")
+    check result.endsWith("module.exports=exports;")
+
+  test "iife wrapper with module name":
+    let opts = BundleConfig(minify: true, format: fmtIIFE, moduleName: "UI")
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check result.contains("var UI=(function(exports)")
+    check result.contains("exports.mul=mul;")
+    check result.endsWith("return exports;})({});")
+
+  test "iife wrapper defaults module name to entry basename":
+    let opts = BundleConfig(minify: true, format: fmtIIFE)
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check result.contains("var main=(function(exports)")
+
+  test "umd wrapper with module name":
+    let opts = BundleConfig(minify: true, format: fmtUMD, moduleName: "UI")
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check result.contains("global.UI={}")
+    check result.contains("typeof exports==='object'")
+    check result.endsWith("return exports;}));")
+
+  test "amd wrapper":
+    let opts = BundleConfig(minify: true, format: fmtAMD)
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check result.startsWith("define(['exports']")
+    check result.contains("exports.mul=mul;")
+    check result.endsWith("return exports;}));")
+
+  test "system wrapper":
+    let opts = BundleConfig(minify: true, format: fmtSystem)
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check result.startsWith("System.register([],")
+    check result.contains("exports.mul=mul;")
+    check result.endsWith("})};}));")
+
+  test "wrapped formats strip import/export statements":
+    let opts = BundleConfig(minify: true, format: fmtIIFE, moduleName: "UI")
+    let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
+    check not result.contains("import {add}")
+    check not result.contains("export function mul")
+
+  removeDir(tmpDir)
+
 suite "JS mangler":
   let mangleOpts = BundleConfig(minify: true, mangle: true)
 

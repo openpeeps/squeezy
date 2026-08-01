@@ -6,7 +6,7 @@
 
 import pkg/sweetsyntax
 import pkg/sweetsyntax/engine/[ast, parser]
-import pkg/sweetsyntax/[config, sweetlexer, tokenizer]
+import pkg/sweetsyntax/[sweetlexer, tokenizer]
 import pkg/sweetsyntax/languages/js
 import pkg/sweetsyntax/languages/prepared/js
 

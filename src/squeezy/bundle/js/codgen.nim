@@ -445,6 +445,9 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       ctx.add(' ')
       genNode(ctx, n.children[0], PrecAssign)
   of nkImport:
+    if ctx.opts.stripExports:
+      # Wrapped formats: imports are inlined as sibling modules — drop the statement
+      return
     if n.children.len == 0:
       ctx.add("import")
     elif n.children.len == 2 and n.children[0].kind == nkEmpty and
@@ -750,6 +753,20 @@ proc genStmt(ctx: var GenContext, n: Node) =
         ctx.add('}')
 
   of "export":
+    if ctx.opts.stripExports:
+      # Wrapped formats: strip the `export` keyword; declarations emit as-is.
+      if n.children.len > 1:
+        let inner = n.children[1]
+        if inner.kind == nkIdent and inner.name == "default":
+          # export default expr -> var __default = expr;
+          if n.children.len > 2:
+            ctx.add("var __default=")
+            genNode(ctx, n.children[2], PrecAssign)
+            ctx.add(';')
+        elif inner.kind in {nkFunction, nkStatement}:
+          genNode(ctx, inner, PrecAssign)
+        # export {a, b} / export * from ... -> nothing (module-boundary only)
+      return
     ctx.add("export")
     if n.children.len > 1:
       let inner = n.children[1]
