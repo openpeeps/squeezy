@@ -38,24 +38,24 @@ Comparing Squeezy vs ESBuild (on d3.js library ~ 20k lines)
   Output sizes:
 
     Original:              587043 bytes
-    squeezy-inline:        420082 bytes
-    squeezy-bundle:        391851 bytes
-    squeezy-bundle+mangle: 338729 bytes
+    squeezy-inline:        420081 bytes
+    squeezy-bundle:        413739 bytes
+    squeezy-bundle+mangle: 360824 bytes
     esbuild:               281878 bytes
   [OK] output size comparison + save
 
   squeezy-inline:
-    Time (mean ± σ):      14.7 ms ±   3.8 ms    [User: 10.9 ms, System: 2.3 ms]
-    Range (min … max):    12.9 ms …  58.6 ms    168 runs
+    Time (mean ± σ):      13.5 ms ±   0.8 ms    [User: 10.3 ms, System: 2.1 ms]
+    Range (min … max):    11.9 ms …  17.3 ms    156 runs
   squeezy-bundle:
-    Time (mean ± σ):      96.7 ms ±   0.5 ms    [User: 88.4 ms, System: 6.7 ms]
-    Range (min … max):    95.7 ms …  97.6 ms    29 runs
+    Time (mean ± σ):      93.7 ms ±   5.1 ms    [User: 84.0 ms, System: 7.8 ms]
+    Range (min … max):    88.6 ms … 111.4 ms    31 runs
   squeezy-bundle+mangle:
-    Time (mean ± σ):     101.3 ms ±   0.6 ms    [User: 93.1 ms, System: 6.7 ms]
-    Range (min … max):    99.9 ms … 102.5 ms    28 runs
+    Time (mean ± σ):     102.0 ms ±   6.8 ms    [User: 91.5 ms, System: 8.7 ms]
+    Range (min … max):    95.2 ms … 127.7 ms    27 runs
   esbuild:
-    Time (mean ± σ):      53.5 ms ±   0.6 ms    [User: 44.1 ms, System: 10.4 ms]
-    Range (min … max):    52.6 ms …  55.2 ms    52 runs
+    Time (mean ± σ):      63.9 ms ±   4.0 ms    [User: 50.8 ms, System: 14.5 ms]
+    Range (min … max):    58.9 ms …  77.5 ms    39 runs
   [OK] hyperfine benchmark
 ```
 

@@ -11,77 +11,77 @@ suite "JS code generator":
   test "generates function declaration":
     let code = "function hello(name) { let x = 10; return x + name; }"
     let result = minify(code, "js")
-    check result == "function hello(name){let x=10;return x+name;}"
+    check result == "function hello(name){let x=10;return x+name}"
 
   test "preserves operator precedence":
     let code = "const a = 1 + 2 * 3;"
     let result = minify(code, "js")
-    check result == "const a=1+2*3;"
+    check result == "const a=1+2*3"
 
   test "wraps parens when needed":
     let code = "const a = (1 + 2) * 3;"
     let result = minify(code, "js")
-    check result == "const a=(1+2)*3;"
+    check result == "const a=(1+2)*3"
 
   test "generates if/else":
     let code = "if (x > 0) { return x; } else { return -x; }"
     let result = minify(code, "js")
-    check result == "if(x>0){return x;}else{return -x;}"
+    check result == "if(x>0){return x}else{return -x}"
 
   test "generates for loop":
     let code = "for (var i = 0; i < 10; i++) { console.log(i); }"
     let result = minify(code, "js")
-    check result == "for(var i=0;i<10;i++){console.log(i);}"
+    check result == "for(var i=0;i<10;i++){console.log(i)}"
 
   test "generates while loop":
     let code = "var x = 0; while (x < 5) { x++; }"
     let result = minify(code, "js")
-    check result == "var x=0;while(x<5){x++;}"
+    check result == "var x=0;while(x<5){x++}"
 
   test "generates do-while":
     let code = "do { x++; } while (x < 5);"
     let result = minify(code, "js")
-    check result == "do{x++;}while(x<5)"
+    check result == "do{x++}while(x<5)"
 
   test "generates object literal":
     let code = "var obj = {name: 'hello', age: 42};"
     let result = minify(code, "js")
-    check result == "var obj={name:\"hello\",age:42};"
+    check result == "var obj={name:\"hello\",age:42}"
 
   test "generates string content":
     let code = "var s = \"hello world\";"
     let result = minify(code, "js")
-    check result == "var s=\"hello world\";"
+    check result == "var s=\"hello world\""
 
   test "generates boolean and null":
     let code = "var a = true, b = false, c = null;"
     let result = minify(code, "js")
-    check result == "var a=true, b=false, c=null;"
+    check result == "var a=true,b=false,c=null"
 
   test "generates ternary":
     let code = "var x = a > b ? a : b;"
     let result = minify(code, "js")
-    check result == "var x=a>b?a:b;"
+    check result == "var x=a>b?a:b"
 
   test "generates array literal":
     let code = "var arr = [1, 2, 3];"
     let result = minify(code, "js")
-    check result == "var arr=[1,2,3];"
+    check result == "var arr=[1,2,3]"
 
   test "generates member access":
     let code = "var x = obj.prop;"
     let result = minify(code, "js")
-    check result == "var x=obj.prop;"
+    check result == "var x=obj.prop"
 
   test "generates bracket access":
     let code = "var x = obj['key'];"
     let result = minify(code, "js")
-    check result == "var x=obj[\"key\"];"
+    check result == "var x=obj[\"key\"]"
 
   test "generates function call":
     let code = "console.log('test');"
     let result = minify(code, "js")
-    check result == "console.log(\"test\");"
+    check result == "console.log(\"test\")"
 
 suite "CSS minifier":
   test "strips comments":
@@ -187,7 +187,7 @@ suite "JS code generator edge cases":
   test "generates multiple declarations":
     let code = "var a = 1, b = 2, c = 3;"
     let result = minify(code, "js")
-    check result == "var a=1, b=2, c=3;"
+    check result == "var a=1,b=2,c=3"
 
 suite "Bundle metadata":
   test "minify/1 dispatches by extension":
@@ -291,7 +291,7 @@ suite "JS mangler":
   test "mangles multi-char function parameters":
     let code = "function add(first, second) { return first + second; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function add(a,b){return a+b;}"
+    check result == "function add(a,b){return a+b}"
 
   test "mangles local variables":
     let code = """
@@ -303,22 +303,22 @@ suite "JS mangler":
       }
     """
     let result = minify(code, "js", mangleOpts)
-    check result == "function run(){var a=0;let b=10;const c=100;return a+b+c;}"
+    check result == "function run(){var a=0;let b=10;const c=100;return a+b+c}"
 
   test "preserves console and globals":
     let code = "function log(message) { console.log(message); }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function log(a){console.log(a);}"
+    check result == "function log(a){console.log(a)}"
 
   test "preserves property names in dot access":
     let code = "function get(obj) { return obj.name; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function get(a){return a.name;}"
+    check result == "function get(a){return a.name}"
 
   test "preserves function names and exports":
     let code = "export function calculate(first, second) { return first + second; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "export function calculate(a,b){return a+b;};"
+    check result == "export function calculate(a,b){return a+b}"
 
   test "mangles for-loop variable":
     let code = "function f() { for (var index = 0; index < 10; index++) {} }"
@@ -335,12 +335,12 @@ suite "JS mangler":
       }
     """
     let result = minify(code, "js", mangleOpts)
-    check result == "function outer(a){function inner(b){return a+b;}return inner;}"
+    check result == "function outer(a){function inner(b){return a+b}return inner}"
 
   test "preserves object literal keys":
     let code = "function f() { var obj = {name: 'test'}; return obj.name; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function f(){var a={name:\"test\"}return a.name;}"
+    check result == "function f(){var a={name:\"test\"};return a.name}"
 
   test "preserves known API globals":
     let code = """
@@ -352,12 +352,12 @@ suite "JS mangler":
       }
     """
     let result = minify(code, "js", mangleOpts)
-    check result == "function f(){var a=Math.random();var b=JSON.stringify(a);var c=Date.now();return c;}"
+    check result == "function f(){var a=Math.random();var b=JSON.stringify(a);var c=Date.now();return c}"
 
   test "single-char names stay unchanged":
     let code = "function f(a, b) { return a + b; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function f(a,b){return a+b;}"
+    check result == "function f(a,b){return a+b}"
 
   test "mangle produces shorter output":
     let plain = BundleConfig(minify: true, mangle: false)

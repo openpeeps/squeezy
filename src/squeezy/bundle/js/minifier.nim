@@ -30,8 +30,11 @@ proc parseJsString*(code: string): OpenAstProgram =
   p[].curr = p[].getToken()
   p[].next = p[].getToken()
   result = OpenAstProgram()
+  result.nodes = newSeqOfCap[Node](code.len shr 5)
   while p[].curr.kind != tkEOF:
-    result.nodes.add(parseStatement(p[]))
+    let stmt = parseStatement(p[])
+    if not stmt.isNil:
+      result.nodes.add(stmt)
 
 proc minifyJs*(code: string, opts: JsGenOptions = defaultJsGenOpts(), sourceFile: string = ""): tuple[code: string, sourceMapRaw: string] =
   let program = parseJsString(code)

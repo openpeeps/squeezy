@@ -5,9 +5,6 @@ const
   dataFile = "tests/data/d3.js"
   runnerBin = "tests/bench_runner"
 
-let sweetsyntaxPath* = "/Users/georgelemon/Development/packages/sweetsyntax/src"
-let openparserPath* = "/Users/georgelemon/Development/packages/openparser/src"
-
 proc checkDependencies: string =
   if not fileExists(dataFile):
     return "data file not found: " & dataFile
@@ -15,16 +12,6 @@ proc checkDependencies: string =
     return "hyperfine not found in PATH"
   if execCmdEx("which esbuild").exitCode != 0:
     return "esbuild not found in PATH"
-  ""
-
-proc buildRunner: string =
-  let cmd = "nim c -d:release --path:src --path:" &
-    quoteShell(sweetsyntaxPath) & " --path:" &
-    quoteShell(openparserPath) & " -o:" & runnerBin &
-    " tests/bench_runner.nim 2>&1"
-  let (outp, code) = execCmdEx(cmd)
-  if code != 0:
-    return "build failed:\n" & outp
   ""
 
 proc runTool(cmd: string): tuple[output: string, exitCode: int] =
@@ -47,12 +34,6 @@ proc runWithHyperfine(label, cmd: string): string =
 suite "Benchmark":
   test "dependencies available":
     let err = checkDependencies()
-    check err.len == 0
-    if err.len > 0:
-      skip()
-
-  test "build bench runner":
-    let err = buildRunner()
     check err.len == 0
     if err.len > 0:
       skip()
