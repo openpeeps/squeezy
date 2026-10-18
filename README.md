@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <code>nimble install squeezy</code>
+  <code>nimble install squeezy</code> / <code>clue install squeezy --build</code>
 </p>
 
 <p align="center">
@@ -25,10 +25,42 @@
 Check in the [examples directory](https://github.com/openpeeps/squeezy/tree/main/examples) and the [unit tests](https://github.com/openpeeps/squeezy/tree/main/tests)
 
 ### CLI
-```sh
-# build the binary with clue
-clue build
 
+```
+A dead simple JavaScript and CSS validator, bundler and minifier
+  (c) OpenPeeps | MIT License
+  Build Version: 0.1.0
+
+usage: squeezy <command> [args] [options]
+
+Commands
+  css <input.css> [-o output]      minify CSS, inlines @import
+  bundle <entry.js> [-o output]    bundle JS, resolves imports
+
+CSS options
+  -o, --out <file>                 write to file instead of stdout
+      --preserve-comments          keep comments
+
+Bundle options
+  -o, --out <file>                 write to file instead of stdout
+      --minify                     minify JS output
+      --mangle                     mangle JS identifiers, implies minify
+      --sourcemap                  emit a source map next to output, es format only
+      --format <fmt>               es, cjs, iife, umd, amd, system (default es)
+      --name <name>                module name for iife and umd wrappers
+      --preserve-comments          keep comments
+
+  -h, --help                       show this help
+  --version                        show version
+
+aliases: minify for css, js for bundle
+examples:
+  squeezy css styles.css -o styles.min.css
+  squeezy bundle app.js -o bundle.js --minify --mangle
+```
+
+### Examples
+```sh
 # minify CSS (@import gets inlined)
 squeezy css styles.css -o styles.min.css
 
@@ -42,7 +74,14 @@ squeezy --help
 
 
 ### Roadmap
-..
+- Fix module graph: follow `export ... from` re-exports, then dynamic `import()` / `require()`
+- `check` command wiring up the existing validator
+- CSS correctness: conditional `@import`, `url()` rebasing, then CSS source maps
+- Decide `treeShake`: implement (with bundle-wide mangling) or remove the flag
+- Bare-specifier / `node_modules` resolution
+- JS source maps for wrapped formats
+- CLI: `html` command, stdin input, `--watch` mode
+- Close the esbuild size gap, measured against the existing bench
 
 
 ## Benchmarks
