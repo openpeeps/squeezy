@@ -15,6 +15,7 @@
 ## 😍 Key Features
 - High-performance minifier built with Nim lang 👑
 - Validate, Bundle and minify CSS and JavaScript assets
+- CLI with `css` and `bundle` commands (stdlib only, no dependencies)
 - Source map generation for JavaScript
 - Identifier mangling for JavaScript
 - Inline Minifier for HTML / CSS / JavaScript (fastest, no parsing, no validation)
@@ -22,6 +23,22 @@
 
 ## Examples
 Check in the [examples directory](https://github.com/openpeeps/squeezy/tree/main/examples) and the [unit tests](https://github.com/openpeeps/squeezy/tree/main/tests)
+
+### CLI
+```sh
+# build the binary with clue
+clue build
+
+# minify CSS (@import gets inlined)
+squeezy css styles.css -o styles.min.css
+
+# bundle JS, with optional minification
+squeezy bundle app.js -o bundle.js --minify --mangle
+
+# other bundle options
+squeezy bundle app.js -o bundle.js --format=iife --name=MyLib --sourcemap
+squeezy --help
+```
 
 
 ### Roadmap
