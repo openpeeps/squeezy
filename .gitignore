@@ -3,6 +3,8 @@ nimcache/
 nimblecache/
 htmldocs/
 testresults/
+/bin/
+clue.lock
 /tests/*
 !/tests/*.nim
 !/tests/*.nims

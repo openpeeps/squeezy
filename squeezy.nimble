@@ -5,6 +5,10 @@ author        = "George Lemon"
 description   = "JS & CSS validator, bundler and minifier"
 license       = "MIT"
 srcDir        = "src"
+installExt    = @["nim"]
+installDirs   = @["squeezy"]
+bin           = @["squeezy"]
+binDir        = "bin"
 
 
 # Dependencies
