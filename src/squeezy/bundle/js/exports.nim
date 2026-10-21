@@ -47,6 +47,26 @@ proc exportName(n: Node): string =
   else:
     discard
 
+proc defaultLocalName*(exportNode: Node): string =
+  ## Local identifier bound by an `export default ...` statement:
+  ## the declared name for named functions/classes, else "__default".
+  ## Mirrors the stripped (wrapped-format) codegen shape so bundlers
+  ## can alias default imports to the surviving declaration.
+  result = "__default"
+  if exportNode.isNil or exportNode.kind != nkStatement: return
+  if exportNode.children.len < 3: return
+  let v = exportNode.children[2]
+  if v.isNil: return
+  if v.kind == nkFunction and v.children.len > 2 and
+     not v.children[2].isNil and v.children[2].kind == nkIdent:
+    # [keyword, */empty, name, ...] — arrows carry a body at [2] instead.
+    return v.children[2].name
+  if v.kind == nkStatement and v.children.len > 1 and
+     not v.children[0].isNil and v.children[0].kind == nkIdent and
+     v.children[0].name == "class" and
+     not v.children[1].isNil and v.children[1].kind == nkIdent:
+    return v.children[1].name
+
 proc collectExports*(prog: OpenAstProgram): seq[ExportEntry] =
   ## Collect all exported names from a parsed program.
   for node in prog.nodes:
@@ -59,8 +79,9 @@ proc collectExports*(prog: OpenAstProgram): seq[ExportEntry] =
     let inner = node.children[1]
 
     if inner.kind == nkIdent and inner.name == "default":
-      # export default <expr>
-      result.add ExportEntry(exportedName: "default", localName: "__default")
+      # export default <expr> — local is the declared name when present
+      result.add ExportEntry(exportedName: "default",
+                             localName: defaultLocalName(node))
     elif inner.kind == nkIdentDefs:
       # export { a, b as c }
       for child in inner.children:

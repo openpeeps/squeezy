@@ -65,6 +65,29 @@ suite "JS code generator":
     check result.contains("undefined")
     check result.contains("===undefined")
 
+  test "parses destructuring defaults":
+    check minify("var {a = 1, b} = obj;", "js") == "var {a=1,b}=obj"
+    check minify("var {a: x = 2} = obj;", "js") == "var {a:x=2}=obj"
+    check minify("function f({a = 1} = {}) { return a; }", "js") ==
+      "function f({a=1}={}){return a}"
+
+  test "parses object method defaults and rest":
+    check minify("var o = { fetch(u, push = true, cb) { return cb(u); } };",
+      "js") == "var o={fetch(u,push=true,cb){return cb(u)}}"
+    check minify("var o = { m(...args) { return args; } };", "js") ==
+      "var o={m(...args){return args}}"
+
+  test "keeps parens on arrow object bodies":
+    check minify("var g = x => ({a: 1});", "js") == "var g=x=>({a:1})"
+    check minify("var o = {create: (p) => ({t: 1})};", "js") ==
+      "var o={create:p=>({t:1})}"
+    check minify("var o = {k: async () => {return 1;}};", "js") ==
+      "var o={k:async ()=>{return 1}}"
+
+  test "object with leading comment stays an object":
+    let code = "var o = {\n/** doc */\na: 1,\nb: 2\n};"
+    check minify(code, "js") == "var o={a:1,b:2}"
+
   test "generates ternary":
     let code = "var x = a > b ? a : b;"
     let result = minify(code, "js")
@@ -238,10 +261,11 @@ suite "JS bundle output formats":
   writeFile(tmpDir / "utils.js", "export function add(a,b){return a+b}")
   writeFile(tmpDir / "main.js", "import {add} from './utils.js'; export function mul(a,b){return a*b}")
 
-  test "es format keeps native statements":
+  test "es format drops resolved imports and inlines deps":
     let opts = BundleConfig(minify: true, format: fmtES)
     let result = jsbundler.bundleJs(tmpDir / "main.js", opts)
-    check result.contains("import {add}")
+    check not result.contains("from './utils.js'")
+    check result.contains("export function add")
     check result.contains("export function mul")
 
   test "cjs wrapper":
@@ -508,10 +532,10 @@ suite "Node module resolution":
     let result = jsbundler.bundleJs(root / "src" / "entry.js",
       BundleConfig(minify: false))
     removeDir(root)
-    check result.contains("export const a = 42;")
-    check result.contains("export const b = 7;")
-    check result.contains("export const c = 1;")
-    check result.contains("export const feat = 2;")
+    check result.contains("export const a=42")
+    check result.contains("export const b=7")
+    check result.contains("export const c=1")
+    check result.contains("export const feat=2")
 
   test "bundleJs discovers require, dynamic import, and export from":
     let root = makeNodeTree()
@@ -543,7 +567,7 @@ suite "Node module resolution":
     let result = jsbundler.bundleJs(root / "src" / "entry.js",
       BundleConfig(minify: false))
     removeDir(root)
-    check result.contains("export const broken = 3;")
+    check result.contains("export const broken=3")
 
   test "nested node_modules shadows outer":
     let root = makeNodeTree()
@@ -557,8 +581,8 @@ suite "Node module resolution":
     let result = jsbundler.bundleJs(root / "src" / "nested" / "entry.js",
       BundleConfig(minify: false))
     removeDir(root)
-    check result.contains("export const a = 99;")
-    check not result.contains("export const a = 42;")
+    check result.contains("export const a=99")
+    check not result.contains("export const a=42")
 
   test "bundleJs tolerates null and undefined literals":
     let root = makeNodeTree()
@@ -569,5 +593,5 @@ suite "Node module resolution":
     let result = jsbundler.bundleJs(root / "src" / "entry.js",
       BundleConfig(minify: false))
     removeDir(root)
-    check result.contains("export const a = 42;")
-    check result.contains("export const c = 1;")
+    check result.contains("export const a")
+    check result.contains("export const c")

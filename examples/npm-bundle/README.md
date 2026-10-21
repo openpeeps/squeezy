@@ -11,15 +11,23 @@ npm-bundle/
   src/
     entry.js              main entry: bare, scoped, exports-map, subpath,
                           require(), export-from, relative, null/undefined
+    run.js                require-free entry: executes under node, asserting
+                          the bundle actually runs (see tests)
     helper.js             relative dep
     legacy.js             imports pkg-broken (malformed package.json)
     nested/entry.js       resolves the shadowing pkg-main below it
   node_modules/
-    pkg-main              resolves via `main`
+    pkg-main              resolves via `main`; also has a default export
     @scope/pkg-module     scoped package, resolves via `module`
     pkg-exports           resolves via `exports` (`.` and `./feature`)
     pkg-broken            malformed package.json, falls back to index.js
 ```
+
+Resolved imports are dropped from the output and replaced by aliases
+(`import MainDef from 'pkg-main'` becomes `var MainDef = mainDefault`
+after the dep chunk; `import * as ns` becomes a namespace object).
+Unresolved specifiers (builtins, `--external`, missing files) keep
+their import statements in `es` output.
 
 Try it (from this directory, with `squeezy` on PATH or `../../bin/squeezy`):
 

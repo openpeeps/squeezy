@@ -8,6 +8,7 @@ import std/[strutils, os]
 import sweetsyntax/engine/ast
 import ../common
 import ../sourcemap
+import ./exports
 import ./mangler
 when defined(sweetSyntaxDebug):
   import pkg/openparser/json
@@ -117,13 +118,26 @@ proc needsParens(childPrec, parentPrec: int, parentOp: string, isLhs: bool): boo
   return false
 
 proc isObjLiteral(n: Node): bool =
-  n.kind == nkBlock and n.children.len > 0 and
-    not n.children[0].isNil and
-    (n.children[0].kind == nkColonExpr or
-     (n.children[0].kind == nkCall and n.children[0].children.len > 0 and
-      not n.children[0].children[0].isNil and
-      n.children[0].children[0].kind == nkIdent and
-      n.children[0].children[0].name == "spread"))
+  ## Object literals and destructuring patterns share the nkBlock shape
+  ## (pattern defaults ride as 3-child nkColonExpr members carrying an
+  ## `=` marker). Leading comments and empties are trivia, not members.
+  ## Statement blocks never hold bare nkColonExpr children (labels parse
+  ## as nkStatement), so the shapes stay unambiguous.
+  if n.kind != nkBlock or n.children.len == 0:
+    return false
+  var first: Node = nil
+  for child in n.children:
+    if child.isNil or child.kind == nkEmpty: continue
+    if child.kind in {nkInlineComment, nkDocComment}: continue
+    first = child
+    break
+  if first.isNil:
+    return false
+  result = first.kind == nkColonExpr or
+    (first.kind == nkCall and first.children.len > 0 and
+     not first.children[0].isNil and
+     first.children[0].kind == nkIdent and
+     first.children[0].name == "spread")
 
 proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: string = "", isLhs: bool = true)
 proc genStmt(ctx: var GenContext, n: Node)
@@ -323,7 +337,9 @@ proc genMethod(ctx: var GenContext, fn: Node, key: Node) =
 
 proc isMethodShorthand(fn: Node): bool =
   ## Method-shaped function node used for object/class members:
-  ## [flagIdents..., (empty)?, params(nkIdentDefs), body(nkBlock)].
+  ## [flagIdents..., params(nkIdentDefs), body(nkBlock)].
+  ## Arrow functions (`[empty, params, body]`) are deliberately excluded:
+  ## the empty marker is reserved for arrows so the shapes never collide.
   if fn.isNil or fn.kind != nkFunction or fn.children.len < 2: return false
   let last = fn.children[^1]
   let params = fn.children[^2]
@@ -332,10 +348,26 @@ proc isMethodShorthand(fn: Node): bool =
   for j in 0 ..< fn.children.len - 2:
     let c = fn.children[j]
     if c.isNil: continue
-    if c.kind != nkIdent and c.kind != nkEmpty: return false
-    if c.kind == nkIdent and c.name notin ["*", "static", "get", "set", "async"]:
+    if c.kind != nkIdent: return false
+    if c.name notin ["*", "static", "get", "set", "async"]:
       return false
   true
+
+proc isAsyncArrow(fn: Node): bool =
+  ## `[async, params, body]` shape. In object-literal value position this
+  ## is always an async arrow: async object methods do not parse today,
+  ## so unlike plain arrows no method shape collides with it there.
+  ## (Class bodies are different — real async methods live there —
+  ## so this guard applies to the object site only.)
+  if fn.isNil or fn.kind != nkFunction or fn.children.len != 3:
+    return false
+  let first = fn.children[0]
+  let params = fn.children[1]
+  let body = fn.children[2]
+  result = not first.isNil and first.kind == nkIdent and
+    first.name == "async" and not params.isNil and
+    params.kind == nkIdentDefs and not body.isNil and
+    body.kind == nkBlock
 
 proc genObjLiteral(ctx: var GenContext, n: Node) =
   ctx.add('{')
@@ -358,7 +390,15 @@ proc genObjLiteral(ctx: var GenContext, n: Node) =
       let key = child.children[0]
       let val = child.children[1]
       if key.isNil or val.isNil: continue
-      if val.kind == nkFunction and isMethodShorthand(val):
+      if child.children.len >= 3 and not child.children[2].isNil and
+         child.children[2].kind == nkIdent and child.children[2].name == "=":
+        # Destructuring default `{ key = default }`: kept verbatim,
+        # never degraded into `key: default`.
+        genMemberKey(ctx, key)
+        ctx.add('=')
+        genNode(ctx, val, PrecAssign)
+      elif val.kind == nkFunction and isMethodShorthand(val) and
+          not isAsyncArrow(val):
         genMethod(ctx, val, key)
       elif val.kind == nkEmpty:
         # Bare shorthand `{a}` — parser expands to `key:key`; emit compact form
@@ -441,7 +481,13 @@ proc genFn(ctx: var GenContext, n: Node) =
     ctx.add("=>")
     if bodyIdx < children.len:
       let body = children[bodyIdx]
-      if not body.isNil and body.kind == nkBlock:
+      if not body.isNil and body.kind == nkBlock and isObjLiteral(body):
+        # Parenthesized object body `=> ({...})`: bare braces would
+        # re-parse as a statement block, so keep the grouping parens.
+        ctx.add('(')
+        genObjLiteral(ctx, body)
+        ctx.add(')')
+      elif not body.isNil and body.kind == nkBlock:
         # Block bodies keep their braces — unwrapping a single statement
         # would produce invalid arrows (`(i,j) => for(...) {...}`).
         ctx.add('{')
@@ -684,7 +730,11 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
   of nkColonExpr:
     if n.children.len >= 2:
       genNode(ctx, n.children[0], PrecAssign)
-      ctx.add(':')
+      if n.children.len >= 3 and not n.children[2].isNil and
+         n.children[2].kind == nkIdent and n.children[2].name == "=":
+        ctx.add('=')
+      else:
+        ctx.add(':')
       genNode(ctx, n.children[1], PrecAssign)
   of nkCall:
     ctx.track(n)
@@ -1213,11 +1263,17 @@ proc genStmt(ctx: var GenContext, n: Node) =
       if n.children.len > 1:
         let inner = n.children[1]
         if inner.kind == nkIdent and inner.name == "default":
-          # export default expr -> var __default = expr;
           if n.children.len > 2:
-            ctx.add("var __default=")
-            genNode(ctx, n.children[2], PrecAssign)
-            ctx.add(';')
+            let local = defaultLocalName(n)
+            if local != "__default":
+              # Named `export default function Foo` / `class Foo`:
+              # keep the declaration so importers alias to Foo.
+              genNode(ctx, n.children[2], PrecAssign)
+            else:
+              # export default expr -> var __default = expr;
+              ctx.add("var __default=")
+              genNode(ctx, n.children[2], PrecAssign)
+              ctx.add(';')
         elif inner.kind in {nkFunction, nkStatement}:
           genNode(ctx, inner, PrecAssign)
         # export {a, b} / export * from ... -> nothing (module-boundary only)

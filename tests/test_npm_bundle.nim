@@ -1,4 +1,4 @@
-import std/[unittest, os, strutils]
+import std/[unittest, os, strutils, osproc]
 import squeezy/bundle/bundler
 import squeezy/bundle/common
 import squeezy/bundle/js/bundler as jsbundler
@@ -20,6 +20,12 @@ suite "npm-bundle fixture":
     check result.contains("exports-root")
     check result.contains("exports-subpath")
     check result.contains("rel")
+    # resolved imports are dropped and replaced by aliases
+    check not result.contains("from 'pkg-main'")
+    check not result.contains("from '@scope/pkg-module'")
+    check not result.contains("from 'pkg-exports'")
+    check result.contains("MainDef=mainDefault")
+    check result.contains("MainNs={")
 
   test "iife bundle with minify is valid JS":
     let opts = BundleConfig(minify: true, format: fmtIIFE, moduleName: "Fixture")
@@ -33,7 +39,7 @@ suite "npm-bundle fixture":
     cfg.externals = @["pkg-main"]
     let result = jsbundler.bundleJs(fixtureRoot / "src" / "entry.js", cfg)
     check not result.contains("outer-main")
-    check result.contains("from 'pkg-main'")
+    check result.contains("from \"pkg-main\"")
 
   test "malformed package.json falls back to index.js":
     let result = jsbundler.bundleJs(fixtureRoot / "src" / "legacy.js",
@@ -67,3 +73,17 @@ suite "npm-bundle fixture":
     check not result.contains("firstCount")
     check not result.contains("combinedTotal")
     check result.contains("exports.totalize=totalize")
+
+  test "iife bundle executes under node":
+    let node = findExe("node")
+    if node.len == 0:
+      skip()
+    let outFile = fixtureRoot / "dist" / "runtime.js"
+    createDir(fixtureRoot / "dist")
+    let opts = BundleConfig(format: fmtIIFE, moduleName: "Fixture")
+    writeFile(outFile, jsbundler.bundleJs(fixtureRoot / "src" / "run.js",
+      opts))
+    let (output, code) = execCmdEx(node & " " & quoteShell(outFile))
+    check code == 0
+    check output.strip() ==
+      "outer-main|scoped-module|exports-root|exports-subpath|def-main|outer-main|rel"

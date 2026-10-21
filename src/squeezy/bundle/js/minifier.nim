@@ -39,3 +39,8 @@ proc parseJsString*(code: string): OpenAstProgram =
 proc minifyJs*(code: string, opts: JsGenOptions = defaultJsGenOpts(), sourceFile: string = ""): tuple[code: string, sourceMapRaw: string] =
   let program = parseJsString(code)
   result = generateJs(program, opts, sourceFile, code)
+
+proc minifyJsProgram*(program: OpenAstProgram, opts: JsGenOptions = defaultJsGenOpts()): tuple[code: string, sourceMapRaw: string] =
+  ## Codegen for an already-parsed (possibly rewritten, e.g. by the
+  ## bundler) program. No source map: rewritten nodes carry no positions.
+  result = generateJs(program, opts)
