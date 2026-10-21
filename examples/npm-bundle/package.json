@@ -1,0 +1,11 @@
+{
+  "name": "squeezy-bundle-fixture",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Offline fixture project for testing squeezy node_modules bundling. node_modules/ is committed intentionally so tests run without network access.",
+  "type": "module",
+  "scripts": {
+    "bundle": "squeezy bundle src/entry.js -o dist/bundle.js --minify",
+    "bundle:iife": "squeezy bundle src/entry.js --format=iife --name=Fixture -o dist/bundle.js --minify"
+  }
+}

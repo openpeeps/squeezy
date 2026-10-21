@@ -6,6 +6,7 @@ testresults/
 /bin/
 clue.lock
 /plans/
+/examples/npm-bundle/dist/
 /tests/*
 !/tests/*.nim
 !/tests/*.nims
