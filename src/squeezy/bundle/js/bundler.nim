@@ -112,13 +112,16 @@ proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
           discard
 
   let wrapped = opts.format != fmtES
+  # Phase 1: per-module codegen. Mangle stays off here — it runs once
+  # over the whole bundle below so short names are unique bundle-wide.
+  # (Per-module mangling assigned the same short names in every file.)
+  let genOpts = JsGenOptions(minify: opts.minify, mangle: false,
+                             preserveComments: opts.preserveComments,
+                             sourceMap: false, stripExports: wrapped)
   for (path, code) in modules:
     if wrapped:
       # Wrapped formats: drop import/export statements (deps are inlined).
-      let jsOpts = JsGenOptions(minify: opts.minify, mangle: opts.mangle,
-                                preserveComments: opts.preserveComments,
-                                sourceMap: opts.sourceMap, stripExports: true)
-      result.add(minifyJs(code, jsOpts).code)
+      result.add(minifyJs(code, genOpts).code)
     elif opts.minify:
       result.add(minifyJs(code).code)
     else:
@@ -151,3 +154,11 @@ proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
     let name = if opts.moduleName.len > 0: opts.moduleName
                else: entryPoint.splitFile().name
     result = wrapBundle(result, opts.format, name, entryExports)
+
+  # Phase 2: whole-bundle mangle pass. Wrapped formats only: es output
+  # keeps native import/export statements whose cross-module binding
+  # names a global rename could break (es + mangle stays as-is).
+  if opts.mangle and wrapped:
+    let mangleOpts = JsGenOptions(minify: opts.minify, mangle: true,
+                                  preserveComments: opts.preserveComments)
+    result = minifyJs(result, mangleOpts).code
