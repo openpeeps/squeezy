@@ -553,3 +553,15 @@ suite "Node module resolution":
     removeDir(root)
     check result.contains("export const a = 99;")
     check not result.contains("export const a = 42;")
+
+  test "bundleJs tolerates null and undefined literals":
+    let root = makeNodeTree()
+    writeFile(root / "src" / "entry.js",
+      "import { a } from 'pkg-a';\nconst v = null;\nlet u = undefined;\n" &
+      "const c = require('pkg-c');\n" &
+      "if (v === null || u === undefined) { console.log(a, c); }")
+    let result = jsbundler.bundleJs(root / "src" / "entry.js",
+      BundleConfig(minify: false))
+    removeDir(root)
+    check result.contains("export const a = 42;")
+    check result.contains("export const c = 1;")
