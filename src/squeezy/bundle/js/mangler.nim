@@ -4,12 +4,13 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/squeezy
 
-import std/tables
+import std/[tables, sets]
 import sweetsyntax/engine/ast
 
 type
   Mangler* = ref object
     mapping: Table[string, string]
+    used: HashSet[string]
     counter: int
 
 const
@@ -50,7 +51,10 @@ proc genShortName(n: int): string =
     num -= 1
 
 proc newMangler*: Mangler =
-  Mangler(mapping: initTable[string, string](), counter: 0)
+  var used = initHashSet[string]()
+  for w in ReservedWords: used.incl(w)
+  for g in KnownGlobals: used.incl(g)
+  Mangler(mapping: initTable[string, string](), used: used, counter: 0)
 
 proc addName*(m: Mangler, name: string) =
   if name.len == 0: return
@@ -59,11 +63,13 @@ proc addName*(m: Mangler, name: string) =
     m.mapping[name] = name
     return
   var shortName = genShortName(m.counter)
-  while shortName in ReservedWords or shortName in KnownGlobals or
-        shortName in m.mapping:
+  while shortName in m.used:
+    # A short name must never collide with a reserved word, a known global,
+    # or another identifier's short name in the same bundle.
     m.counter += 1
     shortName = genShortName(m.counter)
   m.mapping[name] = shortName
+  m.used.incl(shortName)
   m.counter += 1
 
 proc getMangled*(m: Mangler, name: string): string =
@@ -76,21 +82,40 @@ proc dumpMangler*(m: Mangler): string =
     if k != v:
       result.add("  " & k & " -> " & v & "\n")
 
+proc preserveName*(m: Mangler, name: string) =
+  ## Pin an identifier to itself so later passes never rename it
+  ## (e.g. a bundle wrapper global), and block its reuse as a
+  ## short name for anything else.
+  if name.len == 0: return
+  m.mapping[name] = name
+  m.used.incl(name)
+
 proc walkAndCollect*(m: Mangler, n: Node) =
   if n.isNil: return
   case n.kind
   of nkFunction:
-    let children = n.children
-    if children.len >= 5 and not children[4].isNil and children[4].kind == nkIdentDefs:
-      for param in children[4].children:
-        if param.isNil: continue
-        if param.kind == nkIdent:
-          addName(m, param.name)
-        elif param.kind == nkIdentDefs and param.children.len > 0 and
-             not param.children[0].isNil and param.children[0].kind == nkIdent:
-          addName(m, param.children[0].name)
-    if children.len >= 7 and not children[6].isNil:
-      walkAndCollect(m, children[6])
+    # Collect params and walk the body. Layout varies: plain functions keep
+    # params at index 4 and body at 6, while methods carry leading flag
+    # idents, so locate both by kind instead of position.
+    for child in n.children:
+      if child.isNil: continue
+      if child.kind == nkIdentDefs:
+        for param in child.children:
+          if param.isNil: continue
+          if param.kind == nkIdent:
+            addName(m, param.name)
+          elif param.kind == nkIdentDefs and param.children.len > 0 and
+               not param.children[0].isNil and param.children[0].kind == nkIdent:
+            addName(m, param.children[0].name)
+            # Defaults may hold closures with their own bindings.
+            for j in 1 ..< param.children.len:
+              if not param.children[j].isNil:
+                walkAndCollect(m, param.children[j])
+          else:
+            walkAndCollect(m, param)
+      elif child.kind notin LeafNodes and child.kind != nkNil:
+        # Body block, return type, decorators: walk everything else.
+        walkAndCollect(m, child)
   of nkStatement:
     if n.children.len > 0 and not n.children[0].isNil and
        n.children[0].kind == nkIdent and
@@ -117,11 +142,11 @@ proc walkAndCollect*(m: Mangler, n: Node) =
             if def.kind == nkIdentDefs and def.children.len > 0 and
                not def.children[0].isNil and def.children[0].kind == nkIdent:
               addName(m, def.children[0].name)
-    else:
-      if n.kind notin LeafNodes and n.kind != nkNil:
-        for child in n.children:
-          if not child.isNil:
-            walkAndCollect(m, child)
+    # Always descend: initializers and loop bodies may declare more names.
+    if n.kind notin LeafNodes and n.kind != nkNil:
+      for child in n.children:
+        if not child.isNil:
+          walkAndCollect(m, child)
   else:
     if n.kind notin LeafNodes and n.kind != nkNil:
       for child in n.children:

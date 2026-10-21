@@ -529,7 +529,10 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       ctx.add(n.children[0].valStr)
   of nkInlineComment:
     if ctx.opts.preserveComments:
-      ctx.add("//" & n.children[0].valStr)
+      # Wrapped formats never emit statement newlines, so a `//` comment
+      # would swallow the code that follows it on the same line. Always
+      # emit block form (sanitizing any `*/` inside the text).
+      ctx.add("/*" & n.children[0].valStr.replace("*/", "* /") & "*/")
   of nkDocComment:
     if ctx.opts.preserveComments:
       ctx.add("/*" & n.children[0].valStr & "*/")
@@ -1383,6 +1386,8 @@ proc generateJs*(node: Node, opts: JsGenOptions, sourceFile: string = "", source
     discard ctx.sourceMap.addSource(sourceFile, sourceCode)
   if opts.mangle:
     ctx.mangler = newMangler()
+    for preserved in opts.preserveNames:
+      preserveName(ctx.mangler, preserved)
     walkAndCollect(ctx.mangler, node)
   genNode(ctx, node, -1)
   result.code = ctx.result
@@ -1396,6 +1401,8 @@ proc generateJs*(program: OpenAstProgram, opts: JsGenOptions, sourceFile: string
     discard ctx.sourceMap.addSource(sourceFile, sourceCode)
   if opts.mangle:
     ctx.mangler = newMangler()
+    for preserved in opts.preserveNames:
+      preserveName(ctx.mangler, preserved)
     for n in program.nodes:
       if not n.isNil:
         walkAndCollect(ctx.mangler, n)
