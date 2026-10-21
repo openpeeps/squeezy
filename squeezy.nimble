@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.1.1"
 author        = "George Lemon"
 description   = "JS & CSS validator, bundler and minifier"
 license       = "MIT"
