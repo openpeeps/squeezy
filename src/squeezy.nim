@@ -66,6 +66,8 @@ when isMainModule:
     echo "      --format <fmt>               " & grey("es, cjs, iife, umd, amd, system (default es)")
     echo "      --name <name>                " & grey("module name for iife and umd wrappers")
     echo "      --preserve-comments          " & grey("keep comments")
+    echo "      --external <a,b>             " & grey("leave these bare imports untouched")
+    echo "      --node-path <dir>            " & grey("extra node_modules lookup dir")
     echo ""
     echo "  -h, --help                       " & grey("show this help")
     echo "  --version                        " & grey("show version")
@@ -99,6 +101,8 @@ when isMainModule:
     echo "      --format <fmt>       " & grey("es, cjs, iife, umd, amd, system (default es)")
     echo "      --name <name>        " & grey("module name for iife and umd wrappers")
     echo "      --preserve-comments  " & grey("keep comments")
+    echo "      --external <a,b>     " & grey("leave these bare imports untouched")
+    echo "      --node-path <dir>    " & grey("extra node_modules lookup dir")
     echo ""
     echo "  -h, --help               " & grey("show this help")
 
@@ -157,7 +161,8 @@ when isMainModule:
 
   proc doBundle(entry, output: string, minifyFlag, mangleFlag,
       sourcemapFlag: bool, format: OutputFormat, moduleName: string,
-      preserveComments: bool): int =
+      preserveComments: bool, externals: seq[string],
+      nodePaths: seq[string]): int =
     if not fileExists(entry):
       echo errPrefix() & " file not found: " & entry
       return 1
@@ -169,7 +174,8 @@ when isMainModule:
     let doMinify = minifyFlag or mangleFlag
     var cfg = BundleConfig(minify: doMinify, mangle: mangleFlag,
       sourceMap: sourcemapFlag, format: format, moduleName: moduleName,
-      preserveComments: preserveComments)
+      preserveComments: preserveComments, externals: externals,
+      nodePaths: nodePaths)
     if ext == "css" and format != fmtES:
       warn("--format ignored for CSS")
     if sourcemapFlag and ext == "css":
@@ -236,6 +242,8 @@ when isMainModule:
     var preserveFlag = false
     var format = fmtES
     var moduleName = ""
+    var externals: seq[string] = @[]
+    var nodePaths: seq[string] = @[]
     var showHelp = false
     var showVersion = false
     var p = initOptParser(commandLineParams())
@@ -253,6 +261,13 @@ when isMainModule:
               return 1
           of "name":
             moduleName = key
+          of "external":
+            for e in key.split(','):
+              let v = e.strip()
+              if v.len > 0:
+                externals.add(v)
+          of "node-path", "nodePath", "nodepath":
+            nodePaths.add(key)
           else:
             discard
           pending = ""
@@ -295,6 +310,19 @@ when isMainModule:
             moduleName = val
           else:
             pending = "name"
+        of "external", "externals":
+          if val.len > 0:
+            for e in val.split(','):
+              let v = e.strip()
+              if v.len > 0:
+                externals.add(v)
+          else:
+            pending = "external"
+        of "node-path", "nodePath", "nodepath":
+          if val.len > 0:
+            nodePaths.add(val)
+          else:
+            pending = "node-path"
         else:
           echo errPrefix() & " unknown option --" & key
           printHelp()
@@ -336,6 +364,11 @@ when isMainModule:
     if command == "":
       printHelp()
       return 0
+    let nodePathEnv = getEnv("NODE_PATH")
+    if nodePathEnv.len > 0:
+      for p in nodePathEnv.split(PathSep):
+        if p.len > 0:
+          nodePaths.add(p)
     case command
     of "css", "minify":
       # minify a single CSS file, inlining @import
@@ -361,7 +394,8 @@ when isMainModule:
         printBundleHelp()
         return 1
       return doBundle(positionals[0], output, minifyFlag, mangleFlag,
-        sourcemapFlag, format, moduleName, preserveFlag)
+        sourcemapFlag, format, moduleName, preserveFlag, externals,
+        nodePaths)
     else:
       # default command: a bare file path dispatches by extension,
       # like dfkup running a bare script path
@@ -371,7 +405,8 @@ when isMainModule:
           return doCss(command, output, preserveFlag)
         if isJsExt(ext):
           return doBundle(command, output, minifyFlag, mangleFlag,
-            sourcemapFlag, format, moduleName, preserveFlag)
+            sourcemapFlag, format, moduleName, preserveFlag, externals,
+            nodePaths)
       echo errPrefix() & " unknown command `" & command & "`"
       printHelp()
       return 1

@@ -28,6 +28,11 @@ type
     moduleName*: string
       ## Global/module name for iife/umd wrappers.
       ## Defaults to the entry file basename when empty.
+    externals*: seq[string]
+      ## Bare specifiers left untouched (e.g. node builtins or
+      ## packages provided by the host). Never resolved.
+    nodePaths*: seq[string]
+      ## Extra lookup roots checked before walked-up node_modules.
 
   JsGenOptions* = object
     minify*: bool

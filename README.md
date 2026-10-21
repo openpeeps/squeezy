@@ -16,6 +16,7 @@
 - High-performance minifier built with Nim lang 👑
 - Validate, Bundle and minify CSS and JavaScript assets
 - CLI with `css` and `bundle` commands (stdlib only, no dependencies)
+- Node-style resolution: bare specifiers, `node_modules`, `package.json` (`exports`/`main`/`module`), `--external`
 - Source map generation for JavaScript
 - Identifier mangling for JavaScript
 - Inline Minifier for HTML / CSS / JavaScript (fastest, no parsing, no validation)
@@ -49,6 +50,8 @@ Bundle options
       --format <fmt>               es, cjs, iife, umd, amd, system (default es)
       --name <name>                module name for iife and umd wrappers
       --preserve-comments          keep comments
+      --external <a,b>             leave these bare imports untouched
+      --node-path <dir>            extra node_modules lookup dir
 
   -h, --help                       show this help
   --version                        show version
@@ -69,16 +72,17 @@ squeezy bundle app.js -o bundle.js --minify --mangle
 
 # other bundle options
 squeezy bundle app.js -o bundle.js --format=iife --name=MyLib --sourcemap
+squeezy bundle app.js -o bundle.js --external react,react-dom --node-path ./shared
 squeezy --help
 ```
 
 
 ### Roadmap
-- Fix module graph: follow `export ... from` re-exports, then dynamic `import()` / `require()`
+- Fix module graph: follow `export ... from` re-exports, then dynamic `import()` / `require()` (done)
 - `check` command wiring up the existing validator
 - CSS correctness: conditional `@import`, `url()` rebasing, then CSS source maps
 - Decide `treeShake`: implement (with bundle-wide mangling) or remove the flag
-- Bare-specifier / `node_modules` resolution
+- Bare-specifier / `node_modules` resolution (done: `exports`/`main`/`module` fields, scoped packages, `--external`, `--node-path`, `NODE_PATH`)
 - JS source maps for wrapped formats
 - CLI: `html` command, stdin input, `--watch` mode
 - Close the esbuild size gap, measured against the existing bench

@@ -5,6 +5,7 @@ htmldocs/
 testresults/
 /bin/
 clue.lock
+/plans/
 /tests/*
 !/tests/*.nim
 !/tests/*.nims

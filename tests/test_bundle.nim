@@ -3,6 +3,7 @@ import squeezy/bundle/bundler
 import squeezy/bundle/common
 import squeezy/bundle/js/codgen
 import squeezy/bundle/js/bundler as jsbundler
+import squeezy/bundle/js/resolve as jsresolve
 import squeezy/bundle/sourcemap
 import squeezy/bundle/js/minifier as jsminifier
 import squeezy/bundle/css/bundler as cssbundler
@@ -435,3 +436,120 @@ suite "Source map":
     let names = parsed["names"].elems.mapIt(it.getStr())
     check "first" in names
     check "second" in names
+
+suite "Node module resolution":
+  proc makeNodeTree(): string =
+    result = getTempDir() / "squeezy_test_node"
+    if dirExists(result):
+      removeDir(result)
+    createDir(result / "src")
+    # pkg-a: main field
+    createDir(result / "node_modules" / "pkg-a")
+    writeFile(result / "node_modules" / "pkg-a" / "package.json",
+      """{"name": "pkg-a", "version": "1.0.0", "main": "lib.js"}""")
+    writeFile(result / "node_modules" / "pkg-a" / "lib.js",
+      "export const a = 42;")
+    # @scope/pkg-b: module field
+    createDir(result / "node_modules" / "@scope" / "pkg-b")
+    writeFile(result / "node_modules" / "@scope" / "pkg-b" / "package.json",
+      """{"name": "@scope/pkg-b", "version": "1.0.0", "module": "esm.js"}""")
+    writeFile(result / "node_modules" / "@scope" / "pkg-b" / "esm.js",
+      "export const b = 7;")
+    # pkg-c: exports map with root and subpath
+    createDir(result / "node_modules" / "pkg-c" / "dist")
+    writeFile(result / "node_modules" / "pkg-c" / "package.json",
+      """{"name": "pkg-c", "version": "1.0.0", "exports": {".": "./dist/index.js", "./feature": "./dist/feat.js"}}""")
+    writeFile(result / "node_modules" / "pkg-c" / "dist" / "index.js",
+      "export const c = 1;")
+    writeFile(result / "node_modules" / "pkg-c" / "dist" / "feat.js",
+      "export const feat = 2;")
+    # pkg-broken: malformed package.json, index.js fallback
+    createDir(result / "node_modules" / "pkg-broken")
+    writeFile(result / "node_modules" / "pkg-broken" / "package.json",
+      "{not valid json")
+    writeFile(result / "node_modules" / "pkg-broken" / "index.js",
+      "export const broken = 3;")
+
+  test "resolveSpecifier finds main field":
+    let root = makeNodeTree()
+    let r = jsresolve.resolveSpecifier(root / "src" / "entry.js", "pkg-a",
+      jsresolve.defaultResolveOpts())
+    removeDir(root)
+    check r == root / "node_modules" / "pkg-a" / "lib.js"
+
+  test "resolveSpecifier finds exports map root and subpath":
+    let root = makeNodeTree()
+    let opts = jsresolve.defaultResolveOpts()
+    let main = jsresolve.resolveSpecifier(root / "src" / "entry.js", "pkg-c", opts)
+    let sub = jsresolve.resolveSpecifier(root / "src" / "entry.js",
+      "pkg-c/feature", opts)
+    removeDir(root)
+    check main == root / "node_modules" / "pkg-c" / "dist" / "index.js"
+    check sub == root / "node_modules" / "pkg-c" / "dist" / "feat.js"
+
+  test "resolveSpecifier skips builtins and misses unknown":
+    let opts = jsresolve.defaultResolveOpts()
+    check jsresolve.resolveSpecifier("entry.js", "fs", opts) == ""
+    check jsresolve.resolveSpecifier("entry.js", "node:path", opts) == ""
+    check jsresolve.resolveSpecifier("entry.js", "no-such-pkg-xyz", opts) == ""
+
+  test "bundleJs inlines bare, scoped, and exports-map deps":
+    let root = makeNodeTree()
+    writeFile(root / "src" / "entry.js",
+      "import { a } from 'pkg-a';\nimport { b } from '@scope/pkg-b';\n" &
+      "import { c } from 'pkg-c';\nimport { feat } from 'pkg-c/feature';\n" &
+      "console.log(a, b, c, feat);")
+    let result = jsbundler.bundleJs(root / "src" / "entry.js",
+      BundleConfig(minify: false))
+    removeDir(root)
+    check result.contains("export const a = 42;")
+    check result.contains("export const b = 7;")
+    check result.contains("export const c = 1;")
+    check result.contains("export const feat = 2;")
+
+  test "bundleJs discovers require, dynamic import, and export from":
+    let root = makeNodeTree()
+    writeFile(root / "src" / "entry.js",
+      "const c = require('pkg-c');\nconst d = import('pkg-a');\n" &
+      "export { b } from '@scope/pkg-b';\nconsole.log(c, d, b);")
+    let result = jsbundler.bundleJs(root / "src" / "entry.js",
+      BundleConfig(minify: false))
+    removeDir(root)
+    check result.contains("export const c = 1;")
+    check result.contains("export const a = 42;")
+    check result.contains("export const b = 7;")
+
+  test "bundleJs honors externals and skips builtins":
+    let root = makeNodeTree()
+    writeFile(root / "src" / "entry.js",
+      "import { a } from 'pkg-a';\nimport fs from 'fs';\nconsole.log(a);")
+    var cfg = BundleConfig(minify: false)
+    cfg.externals = @["pkg-a"]
+    let result = jsbundler.bundleJs(root / "src" / "entry.js", cfg)
+    removeDir(root)
+    check not result.contains("export const a = 42;")
+    check result.contains("import { a } from 'pkg-a';")
+
+  test "bundleJs falls back to index.js on malformed package.json":
+    let root = makeNodeTree()
+    writeFile(root / "src" / "entry.js",
+      "import { broken } from 'pkg-broken';\nconsole.log(broken);")
+    let result = jsbundler.bundleJs(root / "src" / "entry.js",
+      BundleConfig(minify: false))
+    removeDir(root)
+    check result.contains("export const broken = 3;")
+
+  test "nested node_modules shadows outer":
+    let root = makeNodeTree()
+    createDir(root / "src" / "nested" / "node_modules" / "pkg-a")
+    writeFile(root / "src" / "nested" / "node_modules" / "pkg-a" / "package.json",
+      """{"name": "pkg-a", "version": "2.0.0", "main": "shadow.js"}""")
+    writeFile(root / "src" / "nested" / "node_modules" / "pkg-a" / "shadow.js",
+      "export const a = 99;")
+    writeFile(root / "src" / "nested" / "entry.js",
+      "import { a } from 'pkg-a';\nconsole.log(a);")
+    let result = jsbundler.bundleJs(root / "src" / "nested" / "entry.js",
+      BundleConfig(minify: false))
+    removeDir(root)
+    check result.contains("export const a = 99;")
+    check not result.contains("export const a = 42;")

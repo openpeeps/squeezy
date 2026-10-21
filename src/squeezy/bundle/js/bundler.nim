@@ -4,27 +4,82 @@
 #          Made by Humans from OpenPeeps
 #          https://github.com/openpeeps/squeezy
 
-import std/[os, strutils]
+import std/os
 import pkg/sweetsyntax/engine/ast
 import ../common
 import ./minifier
 import ./exports
 import ./formats
+import ./resolve
 
-proc resolveModulePath(importer: string, specifier: string): string =
-  if specifier.startsWith(".") or specifier.startsWith(".."):
-    let dir = importer.parentDir()
-    result = dir / specifier
-    if not result.endsWith(".js") and not result.endsWith(".jsx") and
-       not result.endsWith(".ts") and not result.endsWith(".tsx"):
-      let withExt = result & ".js"
-      if fileExists(withExt):
-        return withExt
-    if fileExists(result):
-      return result
-  else:
-    if fileExists(specifier):
-      return specifier
+proc resolveFor(opts: BundleConfig, importer: string,
+    specifier: string): string =
+  var rOpts = defaultResolveOpts()
+  rOpts.nodePaths = opts.nodePaths
+  rOpts.externals = opts.externals
+  result = resolveSpecifier(importer, specifier, rOpts)
+
+proc isExportFrom(node: Node): bool =
+  ## True for `export {a} from 'x'` and `export * from 'x'`.
+  ## Excludes `export default <expr>` and local `export {...}`.
+  if node.isNil or node.kind != nkStatement or node.children.len < 3:
+    return false
+  let first = node.children[0]
+  if first.isNil or first.kind != nkIdent or first.name != "export":
+    return false
+  let inner = node.children[1]
+  if inner.isNil:
+    return false
+  let isReExportShape =
+    inner.kind == nkIdentDefs or
+    (inner.kind == nkIdent and inner.name == "*")
+  if not isReExportShape:
+    return false
+  let last = node.children[^1]
+  result = not last.isNil and last.kind == nkLitString
+
+proc collectSpecifiers*(prog: OpenAstProgram): seq[string] =
+  ## Collect every module specifier in a program: static `import`,
+  ## `export ... from` re-exports, `require('x')` calls, and dynamic
+  ## `import('x')` calls (parsed as `nkCall[nkImport, litString]`).
+  proc walk(n: Node, specs: var seq[string]) =
+    if n.isNil:
+      return
+    case n.kind
+    of nkImport:
+      if n.kind notin LeafNodes:
+        for child in n.children:
+          if not child.isNil and child.kind == nkLitString and
+              child.valStr.len > 0:
+            let spec = stripQuotes(child.valStr)
+            if spec.len > 0:
+              specs.add(spec)
+    of nkCall:
+      if n.kind notin LeafNodes and n.children.len >= 2:
+        let callee = n.children[0]
+        let arg = n.children[^1]
+        if not callee.isNil and not arg.isNil and
+            arg.kind == nkLitString and arg.valStr.len > 0:
+          if callee.kind == nkImport or
+              (callee.kind == nkIdent and callee.name == "require"):
+            let spec = stripQuotes(arg.valStr)
+            if spec.len > 0:
+              specs.add(spec)
+    of nkStatement:
+      if isExportFrom(n):
+        let spec = stripQuotes(n.children[^1].valStr)
+        if spec.len > 0:
+          specs.add(spec)
+    else:
+      discard
+    if n.kind notin LeafNodes:
+      for child in n.children:
+        walk(child, specs)
+
+  var specs: seq[string] = @[]
+  for node in prog.nodes:
+    walk(node, specs)
+  result = specs
 
 proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
   var visited: seq[string]
@@ -38,18 +93,23 @@ proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
 
   processFile(entryPoint)
 
-  for (path, code) in modules:
-    let prog = parseJsString(code)
-    for node in prog.nodes:
-      if not node.isNil and node.kind == nkImport:
-        var specifier: string
-        for child in node.children:
-          if not child.isNil and child.kind == nkLitString:
-            specifier = child.valStr
-        if specifier.len > 0:
-          let resolved = resolveModulePath(path, specifier)
-          if resolved.len > 0:
-            processFile(resolved)
+  # Index worklist: processFile appends during traversal.
+  var idx = 0
+  while idx < modules.len:
+    let (path, code) = modules[idx]
+    inc idx
+    let prog =
+      try:
+        parseJsString(code)
+      except CatchableError:
+        continue
+    for specifier in collectSpecifiers(prog):
+      let resolved = resolveFor(opts, path, specifier)
+      if resolved.len > 0:
+        try:
+          processFile(resolved)
+        except CatchableError:
+          discard
 
   let wrapped = opts.format != fmtES
   for (path, code) in modules:
@@ -80,7 +140,8 @@ proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
            not node.children[1].isNil and node.children[1].kind == nkIdent and
            node.children[1].name == "*" and
            not node.children[2].isNil and node.children[2].kind == nkLitString:
-          let resolved = resolveModulePath(path, node.children[2].valStr)
+          let resolved = resolveFor(opts, path,
+            stripQuotes(node.children[2].valStr))
           if resolved.len > 0 and resolved notin visitedStar:
             visitedStar.add(resolved)
             entryExports.add(collectExports(parseJsString(readFile(resolved))))
