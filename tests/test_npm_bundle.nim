@@ -53,3 +53,17 @@ suite "npm-bundle fixture":
       fixtureRoot / "node_modules" / "pkg-exports" / "dist" / "feat.js"
     check jsresolve.resolveSpecifier(fixtureRoot / "src" / "entry.js",
       "fs", opts) == ""
+
+  test "mangle runs bundle-wide on wrapped output":
+    let minOnly = BundleConfig(minify: true, format: fmtIIFE,
+      moduleName: "Fixture")
+    let mangled = BundleConfig(minify: true, mangle: true, format: fmtIIFE,
+      moduleName: "Fixture")
+    let plain = jsbundler.bundleJs(fixtureRoot / "src" / "helper.js", minOnly)
+    let result = jsbundler.bundleJs(fixtureRoot / "src" / "helper.js", mangled)
+    check validateJs(result).len == 0
+    check result.len < plain.len
+    check result.startsWith("var Fixture=")
+    check not result.contains("firstCount")
+    check not result.contains("combinedTotal")
+    check result.contains("exports.totalize=totalize")

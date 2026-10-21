@@ -42,6 +42,9 @@ type
     stripExports*: bool
       ## When true, codegen drops import/export statements and emits
       ## declarations without the `export` keyword (for wrapped formats).
+    preserveNames*: seq[string]
+      ## Identifiers the mangler must leave untouched, e.g. a bundle
+      ## wrapper global (`--name`). Empty by default.
 
 proc defaultConfig*: BundleConfig =
   BundleConfig(minify: true)

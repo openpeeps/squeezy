@@ -128,6 +128,8 @@ proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
       result.add(code)
     result.add("\n")
 
+  let bundleName = if opts.moduleName.len > 0: opts.moduleName
+                     else: entryPoint.splitFile().name
   if wrapped:
     # Collect the entry module's exports, following `export * from 'x'`
     # re-export chains through the module graph.
@@ -151,14 +153,16 @@ proc bundleJs*(entryPoint: string, opts: BundleConfig): string =
             collectStarExports(resolved)
 
     collectStarExports(entryPoint)
-    let name = if opts.moduleName.len > 0: opts.moduleName
-               else: entryPoint.splitFile().name
-    result = wrapBundle(result, opts.format, name, entryExports)
+    result = wrapBundle(result, opts.format, bundleName, entryExports)
 
   # Phase 2: whole-bundle mangle pass. Wrapped formats only: es output
   # keeps native import/export statements whose cross-module binding
   # names a global rename could break (es + mangle stays as-is).
   if opts.mangle and wrapped:
-    let mangleOpts = JsGenOptions(minify: opts.minify, mangle: true,
+    var mangleOpts = JsGenOptions(minify: opts.minify, mangle: true,
                                   preserveComments: opts.preserveComments)
+    if opts.format == fmtIIFE and bundleName.len > 0:
+      # The iife global (`var NAME=...`) is the public entry point;
+      # never hand it out as a short name.
+      mangleOpts.preserveNames = @[bundleName]
     result = minifyJs(result, mangleOpts).code

@@ -59,6 +59,12 @@ suite "JS code generator":
     let result = minify(code, "js")
     check result == "var a=true,b=false,c=null"
 
+  test "preserves undefined distinctly from null":
+    let code = "var u = undefined; if (u === undefined) { u = null; }"
+    let result = minify(code, "js")
+    check result.contains("undefined")
+    check result.contains("===undefined")
+
   test "generates ternary":
     let code = "var x = a > b ? a : b;"
     let result = minify(code, "js")

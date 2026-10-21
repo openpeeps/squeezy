@@ -6,3 +6,8 @@ export function help(x) {
   }
   return x;
 }
+
+export function totalize(firstCount, secondCount) {
+  const combinedTotal = firstCount + secondCount;
+  return combinedTotal;
+}
