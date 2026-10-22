@@ -36,7 +36,10 @@ curl -fsSL "$url" -o /tmp/esbuild.tgz
 rm -rf /tmp/esbuild-pkg
 mkdir -p /tmp/esbuild-pkg
 tar xzf /tmp/esbuild.tgz -C /tmp/esbuild-pkg
-install -m 0755 "/tmp/esbuild-pkg/package/bin/$bin" "$dest/$bin"
+# Layout differs per platform (package/bin/esbuild vs package/esbuild.exe)
+binpath="$(find /tmp/esbuild-pkg/package -type f -name "$bin" | head -n 1)"
+[ -n "$binpath" ] || { echo "ERROR: $bin not found in tarball" >&2; exit 1; }
+install -m 0755 "$binpath" "$dest/$bin"
 rm -rf /tmp/esbuild.tgz /tmp/esbuild-pkg
 echo "$dest" >> "$GITHUB_PATH"
 "$dest/$bin" --version
