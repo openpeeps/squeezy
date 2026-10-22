@@ -1,7 +1,7 @@
 import std/[unittest, os, strutils, osproc, times]
 import bench_runner
-import squeezy/bundle/common
-import squeezy/bundle/js/minifier as jsmin
+import ../src/squeezy/bundle/common
+import ../src/squeezy/bundle/js/minifier
 import sweetsyntax/engine/ast
 
 # Benchmark corpus: d3.js v7.9.0 (unminified, ~20k lines), fetched from CDN
@@ -145,21 +145,21 @@ suite "Benchmark":
     var prog: OpenAstProgram
     for i in 1 .. stageRuns:
       let t0 = epochTime()
-      prog = jsmin.parseJsString(code)
+      prog = parseJsString(code)
       tParse += epochTime() - t0
     doAssert prog.nodes.len > 0
     let plainOpts = JsGenOptions(minify: true)
     var tCodegen = 0.0
     for i in 1 .. stageRuns:
       let t0 = epochTime()
-      let s = jsmin.minifyJsProgram(prog, plainOpts).code
+      let s = minifyJsProgram(prog, plainOpts).code
       tCodegen += epochTime() - t0
       doAssert s.len > 0
     let mangleOpts = JsGenOptions(minify: true, mangle: true)
     var tMangle = 0.0
     for i in 1 .. stageRuns:
       let t0 = epochTime()
-      let s = jsmin.minifyJsProgram(prog, mangleOpts).code
+      let s = minifyJsProgram(prog, mangleOpts).code
       tMangle += epochTime() - t0
       doAssert s.len > 0
     echo "  stages over " & $stageRuns & " runs (parse/codegen/mangle):"

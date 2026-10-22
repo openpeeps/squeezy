@@ -1,12 +1,12 @@
 import std/[unittest, os, strutils, json, sequtils]
-import squeezy/bundle/bundler
-import squeezy/bundle/common
-import squeezy/bundle/js/codgen
-import squeezy/bundle/js/bundler as jsbundler
-import squeezy/bundle/js/resolve as jsresolve
-import squeezy/bundle/sourcemap
-import squeezy/bundle/js/minifier as jsminifier
-import squeezy/bundle/css/bundler as cssbundler
+import ../src/squeezy/bundle/bundler
+import ../src/squeezy/bundle/common
+import ../src/squeezy/bundle/js/codgen
+import ../src/squeezy/bundle/js/bundler as jsbundler
+import ../src/squeezy/bundle/js/resolve as jsresolve
+import ../src/squeezy/bundle/sourcemap
+import ../src/squeezy/bundle/js/minifier as jsminifier
+import ../src/squeezy/bundle/css/bundler as cssbundler
 
 suite "JS code generator":
   test "generates function declaration":

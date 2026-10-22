@@ -1,8 +1,8 @@
 import std/[unittest, os, strutils, osproc]
-import squeezy/bundle/bundler
-import squeezy/bundle/common
-import squeezy/bundle/js/bundler as jsbundler
-import squeezy/bundle/js/resolve as jsresolve
+import ../src/squeezy/bundle/bundler
+import ../src/squeezy/bundle/common
+import ../src/squeezy/bundle/js/bundler as jsbundler
+import ../src/squeezy/bundle/js/resolve as jsresolve
 
 let fixtureRoot = currentSourcePath().parentDir() / ".." / "examples" / "npm-bundle"
 

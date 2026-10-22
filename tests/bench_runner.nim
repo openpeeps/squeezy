@@ -1,7 +1,7 @@
 import std/os
-import squeezy/bundle/common
-import squeezy/bundle/js/minifier as jsminifier
-import squeezy/minify/inlinejs
+import ../src/squeezy/bundle/common
+import ../src/squeezy/bundle/js/minifier as jsminifier
+import ../src/squeezy/minify/inlinejs
 
 proc minifyInline*(code: string): string =
   ## Old character-level minifier, no parsing.
