@@ -26,7 +26,7 @@ proc getJsParser(): ptr GenericParser =
 
 proc parseJsString*(code: string): OpenAstProgram =
   let p = getJsParser()
-  p[].lexer = initLexer(jsInitData, code)
+  p[].lexer = initLexer(jsInitData, code, enableAttrs = false)
   p[].curr = p[].getToken()
   p[].next = p[].getToken()
   result = OpenAstProgram()

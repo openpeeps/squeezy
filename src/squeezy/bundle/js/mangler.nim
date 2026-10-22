@@ -11,6 +11,7 @@ type
   Mangler* = ref object
     mapping: Table[string, string]
     used: HashSet[string]
+    pinned: HashSet[string]
     counter: int
 
 const
@@ -52,14 +53,31 @@ proc genShortName(n: int): string =
 
 proc newMangler*: Mangler =
   var used = initHashSet[string]()
-  for w in ReservedWords: used.incl(w)
-  for g in KnownGlobals: used.incl(g)
-  Mangler(mapping: initTable[string, string](), used: used, counter: 0)
+  var pinned = initHashSet[string]()
+  for w in ReservedWords:
+    used.incl(w)
+    pinned.incl(w)
+  for g in KnownGlobals:
+    used.incl(g)
+    pinned.incl(g)
+  Mangler(mapping: initTable[string, string](), used: used, pinned: pinned,
+    counter: 0)
+
+proc isDeclKw*(name: string): bool {.inline.} =
+  ## Case-free `name in ["var", "let", "const"]` for per-statement checks.
+  case name.len
+  of 3: name == "var" or name == "let"
+  of 5: name == "const"
+  else: false
 
 proc addName*(m: Mangler, name: string) =
   if name.len == 0: return
   if name in m.mapping: return
-  if name in ReservedWords or name in KnownGlobals:
+  if name in m.pinned:
+    # Reserved words, known globals and preserved names are pinned to
+    # themselves. Note this must NOT be `name in m.used`: an original
+    # name colliding with an already-issued short name needs a fresh
+    # short, not a self-pin (which would collide with the earlier name).
     m.mapping[name] = name
     return
   var shortName = genShortName(m.counter)
@@ -73,9 +91,7 @@ proc addName*(m: Mangler, name: string) =
   m.counter += 1
 
 proc getMangled*(m: Mangler, name: string): string =
-  if name in m.mapping:
-    return m.mapping[name]
-  result = name
+  result = m.mapping.getOrDefault(name, name)
 
 proc dumpMangler*(m: Mangler): string =
   for k, v in m.mapping.pairs:
@@ -89,6 +105,7 @@ proc preserveName*(m: Mangler, name: string) =
   if name.len == 0: return
   m.mapping[name] = name
   m.used.incl(name)
+  m.pinned.incl(name)
 
 proc walkAndCollect*(m: Mangler, n: Node) =
   if n.isNil: return
@@ -113,13 +130,14 @@ proc walkAndCollect*(m: Mangler, n: Node) =
                 walkAndCollect(m, param.children[j])
           else:
             walkAndCollect(m, param)
-      elif child.kind notin LeafNodes and child.kind != nkNil:
+      elif child.kind notin LeafNodes:
         # Body block, return type, decorators: walk everything else.
+        # (nkNil is in LeafNodes, so no extra check is needed.)
         walkAndCollect(m, child)
   of nkStatement:
     if n.children.len > 0 and not n.children[0].isNil and
        n.children[0].kind == nkIdent and
-       n.children[0].name in ["var", "let", "const"]:
+       isDeclKw(n.children[0].name):
       for i in 1 ..< n.children.len:
         let def = n.children[i]
         if def.isNil: continue
@@ -135,7 +153,7 @@ proc walkAndCollect*(m: Mangler, n: Node) =
         let init = n.children[1]
         if init.kind == nkStatement and init.children.len > 0 and
            not init.children[0].isNil and init.children[0].kind == nkIdent and
-           init.children[0].name in ["var", "let", "const"]:
+           isDeclKw(init.children[0].name):
           for i in 1 ..< init.children.len:
             let def = init.children[i]
             if def.isNil: continue
@@ -143,12 +161,13 @@ proc walkAndCollect*(m: Mangler, n: Node) =
                not def.children[0].isNil and def.children[0].kind == nkIdent:
               addName(m, def.children[0].name)
     # Always descend: initializers and loop bodies may declare more names.
-    if n.kind notin LeafNodes and n.kind != nkNil:
+    # (nkNil is in LeafNodes, so no extra check is needed.)
+    if n.kind notin LeafNodes:
       for child in n.children:
         if not child.isNil:
           walkAndCollect(m, child)
   else:
-    if n.kind notin LeafNodes and n.kind != nkNil:
+    if n.kind notin LeafNodes:
       for child in n.children:
         if not child.isNil:
           walkAndCollect(m, child)

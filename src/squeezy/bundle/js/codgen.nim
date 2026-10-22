@@ -104,8 +104,40 @@ proc getPrec(op: string): int =
   of "=", "+=", "-=", "*=", "/=", "%=", "**=", "&=", "|=", "^=", "<<=", ">>=", ">>>=", "&&=", "||=", "??=": PrecAssign
   else: -1
 
-proc isRightAssoc(op: string): bool =
-  op in RightAssocOps
+proc isRightAssoc(op: string): bool {.inline.} =
+  ## Right-associative ops are `**` plus every assignment op (all of which
+  ## end in `=`). The trailing-`=` prefilter keeps non-assign operators to a
+  ## couple of character compares instead of a 17-element scan.
+  if op == "**": return true
+  if op.len == 0 or op[^1] != '=': return false
+  getPrec(op) == PrecAssign
+
+proc isBlockStmtKw*(kw: string): bool {.inline.} =
+  ## Block-like statement heads that self-terminate in `genBlockStmts` and
+  ## may go unterminated before `else` in `genThenElse`.
+  case kw.len
+  of 2: kw == "if"
+  of 3: kw == "for" or kw == "try"
+  of 5: kw == "while" or kw == "class" or kw == "label"
+  of 6: kw == "switch"
+  of 8: kw == "function" or kw == "do-while"
+  else: false
+
+proc isMethodFlag*(name: string): bool {.inline.} =
+  ## Method member flags other than `*` (handled separately at each site).
+  case name.len
+  of 3: name == "get" or name == "set"
+  of 5: name == "async"
+  of 6: name == "static"
+  else: false
+
+proc isWordPrefixOp*(opName: string): bool {.inline.} =
+  ## Word operators needing no operand spacing logic beyond the default.
+  case opName.len
+  of 3: opName == "new"
+  of 4: opName == "void"
+  of 6: opName == "typeof" or opName == "delete"
+  else: false
 
 proc needsParens(childPrec, parentPrec: int, parentOp: string, isLhs: bool): bool =
   if childPrec < parentPrec: return true
@@ -208,9 +240,10 @@ proc needsTightParens(n: Node): bool =
     return true
   # ++a and --a must be wrapped before member access: (++a).b not ++a.b
   if inner.kind == nkPrefix and inner.children.len > 0 and
-     not inner.children[0].isNil and inner.children[0].kind == nkIdent and
-     inner.children[0].name in ["++", "--"]:
-    return true
+     not inner.children[0].isNil and inner.children[0].kind == nkIdent:
+    let preOp = inner.children[0].name
+    if preOp.len == 2 and preOp[1] == preOp[0] and preOp[0] in {'+', '-'}:
+      return true
   false
 
 proc genTightOperand(ctx: var GenContext, n: Node, minPrec: int) =
@@ -258,8 +291,7 @@ proc genThenElse(ctx: var GenContext, body: Node, beforeElse: bool = false) =
     # Always terminate: bodies like `a={}` end in `}` yet still need a `;`
     let isControl = body.kind == nkStatement and body.children.len > 0 and
       not body.children[0].isNil and body.children[0].kind == nkIdent and
-      body.children[0].name in ["if", "for", "while", "do-while", "switch",
-                                "try", "class", "function", "label"]
+      isBlockStmtKw(body.children[0].name)
     if ctx.result.len > 0 and ctx.result[^1] != ';':
       if beforeElse:
         # Only control-flow bodies may go unterminated before `else`
@@ -273,8 +305,7 @@ proc genThenElse(ctx: var GenContext, body: Node, beforeElse: bool = false) =
 proc isDeclStmt*(n: Node): bool =
   ## True for var/let/const declaration statements.
   n.kind == nkStatement and n.children.len > 0 and not n.children[0].isNil and
-    n.children[0].kind == nkIdent and
-    n.children[0].name in ["var", "let", "const"]
+    n.children[0].kind == nkIdent and isDeclKw(n.children[0].name)
 
 proc genMemberKey(ctx: var GenContext, key: Node) =
   ## Emits an object/class member key: identifier, quoted string or
@@ -307,7 +338,7 @@ proc genMethod(ctx: var GenContext, fn: Node, key: Node) =
     if name == "*":
       star = true
       inc i
-    elif name in ["static", "get", "set", "async"]:
+    elif isMethodFlag(name):
       preFlags.add(name)
       inc i
     else:
@@ -349,7 +380,7 @@ proc isMethodShorthand(fn: Node): bool =
     let c = fn.children[j]
     if c.isNil: continue
     if c.kind != nkIdent: return false
-    if c.name notin ["*", "static", "get", "set", "async"]:
+    if c.name != "*" and not isMethodFlag(c.name):
       return false
   true
 
@@ -530,38 +561,44 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     if raw.len >= 2 and raw[0] == '`' and raw[^1] == '`':
       ctx.add(raw)
     else:
-      let inner = if raw.len >= 2 and (raw[0] == '"' or raw[0] == '\''):
-        raw[1..^2] else: raw
-      # String tokens carry raw source text (escapes included). Pass escape
-      # pairs through byte-exact and pick the quote style needing fewer
-      # additional escapes.
+      # String tokens carry raw source text (escapes included). Pick the
+      # quote style needing fewer additional escapes. Bounds avoid the
+      # old `raw[1..^2]` slice allocation; both scans run on `raw` directly.
+      let (lo, hi) = if raw.len >= 2 and (raw[0] == '"' or raw[0] == '\''):
+        (1, raw.len - 1) else: (0, raw.len)
       var dq = 0
       var sq = 0
-      var k = 0
-      while k < inner.len:
-        if inner[k] == '\\' and k + 1 < inner.len:
+      var k = lo
+      while k < hi:
+        if raw[k] == '\\' and k + 1 < hi:
           k += 2
           continue
-        if inner[k] == '"': inc dq
-        elif inner[k] == '\'': inc sq
+        if raw[k] == '"': inc dq
+        elif raw[k] == '\'': inc sq
         inc k
       let q: char = if sq < dq: '\'' else: '"'
-      ctx.add(q)
-      k = 0
-      while k < inner.len:
-        let c = inner[k]
-        if c == '\\' and k + 1 < inner.len:
-          ctx.add(c)
-          ctx.add(inner[k + 1])
-          k += 2
-          continue
-        if c == q:
-          ctx.add('\\')
-          ctx.add(q)
-        else:
-          ctx.add(c)
-        inc k
-      ctx.add(q)
+      if lo == 1 and raw[0] == q and (if q == '\'': sq else: dq) == 0:
+        # Already optimal: the rebuild loop below would copy every byte
+        # unchanged (escape pairs pass through, no unescaped q to fix),
+        # so emit the token as-is in a single add.
+        ctx.add(raw)
+      else:
+        ctx.add(q)
+        k = lo
+        while k < hi:
+          let c = raw[k]
+          if c == '\\' and k + 1 < hi:
+            ctx.add(c)
+            ctx.add(raw[k + 1])
+            k += 2
+            continue
+          if c == q:
+            ctx.add('\\')
+            ctx.add(q)
+          else:
+            ctx.add(c)
+          inc k
+        ctx.add(q)
   of nkLitBigInt:
     ctx.track(n)
     ctx.add(n.valBigInt & "n")
@@ -594,7 +631,7 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       if not operand.isNil:
         genNode(ctx, operand, PrecPrefix)
     else:
-      let addSpace = opName in ["typeof", "void", "delete", "new"]
+      let addSpace = isWordPrefixOp(opName)
       ctx.add(opName)
       if addSpace and not operand.isNil:
         if operand.kind in {nkLitInt, nkLitFloat, nkLitString, nkLitBool, nkNil}:
@@ -602,8 +639,8 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
         elif operand.kind == nkPrefix:
           ctx.add(' ')
       # Avoid mis-lexing: `- -t` must not become `--t`, `+ +t` not `++t`
-      if not addSpace and not operand.isNil and
-         (opName == "+" or opName == "-" or opName == "++" or opName == "--"):
+      if not addSpace and not operand.isNil and opName.len in 1 .. 2 and
+         opName[0] in {'+', '-'} and (opName.len == 1 or opName[1] == opName[0]):
         let opSign = if opName == "+" or opName == "++": '+' else: '-'
         let operandSign = leadingUnarySign(operand)
         if operandSign == opSign:
@@ -638,7 +675,9 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       let rhs = n.children[2]
       let prec = getPrec(op)
       if prec >= 0:
-        if op in AssignOps:
+        # Every op mapping to PrecAssign is an assignment op by construction
+        # of getPrec — no separate `op in AssignOps` scan needed.
+        if prec == PrecAssign:
           # Brace-pattern assignment targets at STATEMENT position
           # (`({a} = x);`) require parens; declarator patterns
           # (`const [a,b] = x`) stay bare
@@ -654,17 +693,21 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
             ctx.add(op)
             genNode(ctx, rhs, prec, op, true)
         else:
+          # Unwrap each side once: the old code re-ran unwrapComments up to
+          # three times per side across these checks.
+          let ulhs = unwrapComments(lhs)
+          let urhs = unwrapComments(rhs)
           let wrapLhs = isCommaExpr(lhs) or
-            (unwrapComments(lhs).kind == nkCall and unwrapComments(lhs).children.len > 0 and
-             unwrapComments(lhs).children[0].kind == nkIdent and
-             unwrapComments(lhs).children[0].name == "ternary") or
+            (ulhs.kind == nkCall and ulhs.children.len > 0 and
+             ulhs.children[0].kind == nkIdent and
+             ulhs.children[0].name == "ternary") or
             (lhs.kind == nkInfix and lhs.children.len >= 3 and
              lhs.children[0].kind == nkIdent and
              needsParens(getPrec(lhs.children[0].name), prec, op, false))
           let wrapRhs = isCommaExpr(rhs) or
-            (unwrapComments(rhs).kind == nkCall and unwrapComments(rhs).children.len > 0 and
-             unwrapComments(rhs).children[0].kind == nkIdent and
-             unwrapComments(rhs).children[0].name == "ternary") or
+            (urhs.kind == nkCall and urhs.children.len > 0 and
+             urhs.children[0].kind == nkIdent and
+             urhs.children[0].name == "ternary") or
             (rhs.kind == nkInfix and rhs.children.len >= 3 and
              rhs.children[0].kind == nkIdent and
              needsParens(getPrec(rhs.children[0].name), prec, op, true))
@@ -1226,7 +1269,7 @@ proc genStmt(ctx: var GenContext, n: Node) =
             while j < child.children.len - 2:
               let flag = child.children[j]
               if not flag.isNil and flag.kind == nkIdent and
-                 flag.name in ["static", "get", "set", "async", "*"]:
+                 (flag.name == "*" or isMethodFlag(flag.name)):
                 if flag.name == "*": ctx.add('*')
                 else:
                   ctx.add(flag.name)
@@ -1421,8 +1464,7 @@ proc genBlockStmts(ctx: var GenContext, children: seq[Node]) =
     genStmt(ctx, stmt)
     if stmt.kind == nkStatement:
       let isBlockStmt = stmt.children.len > 0 and stmt.children[0].kind == nkIdent and
-        stmt.children[0].name in ["if", "for", "while", "do-while", "switch", "try",
-                                  "class", "function", "label"]
+        isBlockStmtKw(stmt.children[0].name)
       if not isBlockStmt:
         termSemi()
     elif stmt.kind == nkReturn or stmt.kind == nkImport:

@@ -16,7 +16,7 @@ proc validateJs*(code: string): seq[string] =
     var p = compile(syntax.spec)
     jsHandlers(p)
     p.features = {featAsync, featArrowFn, featGenerators, featTemplateLit, featLabeledStmt}
-    p.lexer = initLexer(syntax.spec, code)
+    p.lexer = initLexer(syntax.spec, code, enableAttrs = false)
     p.curr = p.getToken()
     p.next = p.getToken()
     var program = OpenAstProgram()
