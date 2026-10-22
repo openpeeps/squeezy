@@ -1,2 +1,8 @@
 nimTitle	bundler	squeezy/bundle/js/bundler.html	module squeezy/bundle/js/bundler		0
-nim	bundleJs	squeezy/bundle/js/bundler.html#bundleJs,string,BundleConfig	proc bundleJs(entryPoint: string; opts: BundleConfig): string		27
+nim	ikDefault	squeezy/bundle/js/bundler.html#ikDefault	ImportKind.ikDefault		16
+nim	ikNamed	squeezy/bundle/js/bundler.html#ikNamed	ImportKind.ikNamed		16
+nim	ikNamespace	squeezy/bundle/js/bundler.html#ikNamespace	ImportKind.ikNamespace		16
+nim	ImportKind	squeezy/bundle/js/bundler.html#ImportKind	enum ImportKind		16
+nim	ImportBinding	squeezy/bundle/js/bundler.html#ImportBinding	object ImportBinding		21
+nim	collectSpecifiers	squeezy/bundle/js/bundler.html#collectSpecifiers,OpenAstProgram	proc collectSpecifiers(prog: OpenAstProgram): seq[string]		61
+nim	bundleJs	squeezy/bundle/js/bundler.html#bundleJs,string,BundleConfig	proc bundleJs(entryPoint: string; opts: BundleConfig): string		236

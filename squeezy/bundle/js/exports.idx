@@ -1,0 +1,7 @@
+nimTitle	exports	squeezy/bundle/js/exports.html	module squeezy/bundle/js/exports		0
+nim	ExportEntry	squeezy/bundle/js/exports.html#ExportEntry	object ExportEntry		15
+nim	exportNamed	squeezy/bundle/js/exports.html#exportNamed	ExportKind.exportNamed		19
+nim	exportDefault	squeezy/bundle/js/exports.html#exportDefault	ExportKind.exportDefault		19
+nim	ExportKind	squeezy/bundle/js/exports.html#ExportKind	enum ExportKind		19
+nim	defaultLocalName	squeezy/bundle/js/exports.html#defaultLocalName,Node	proc defaultLocalName(exportNode: Node): string		50
+nim	collectExports	squeezy/bundle/js/exports.html#collectExports,OpenAstProgram	proc collectExports(prog: OpenAstProgram): seq[ExportEntry]		70

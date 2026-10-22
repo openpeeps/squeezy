@@ -1,0 +1,2 @@
+nimTitle	formats	squeezy/bundle/js/formats.html	module squeezy/bundle/js/formats		0
+nim	wrapBundle	squeezy/bundle/js/formats.html#wrapBundle,string,OutputFormat,string,seq[ExportEntry]	proc wrapBundle(code: string; format: OutputFormat; moduleName: string = "";\n           exports: seq[ExportEntry] = @[]): string		25

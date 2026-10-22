@@ -16,10 +16,10 @@
 <link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABmJLR0QA/wD/AP+gvaeTAAAACXBIWXMAAA3XAAAN1wFCKJt4AAAAB3RJTUUH4QQQEwksSS9ZWwAAAk1JREFUWMPtll2ITVEUx39nn/O7Y5qR8f05wtCUUr6ZIS++8pEnkZInPImneaCQ5METNdOkeFBKUhMPRIkHKfEuUZSUlGlKPN2TrgfncpvmnntnmlEyq1Z7t89/rf9a6+y99oZxGZf/XeIq61EdtgKXgdXA0xrYAvBjOIF1AI9zvjcC74BSpndrJPkBWDScTF8Aa4E3wDlgHbASaANmVqlcCnwHvgDvgVfAJ+AikAAvgfVZwLnSVZHZaOuKoQi3ZOMi4NkYkpe1p4J7A8BpYAD49hfIy/oqG0+hLomiKP2L5L+1ubn5115S+3OAn4EnwBlgMzCjyt6ZAnQCJ4A7wOs88iRJHvw50HoujuPBoCKwHWiosy8MdfZnAdcHk8dxXFJ3VQbQlCTJvRBCGdRbD4M6uc5glpY3eAihpN5S5w12diSEcCCEcKUO4ljdr15T76ur1FDDLIQQ3qv71EdDOe3Kxj3leRXyk+pxdWnFWod6Wt2bY3de3aSuUHcPBVimHs7mK9WrmeOF6lR1o9qnzskh2ar2qm1qizpfXaPeVGdlmGN5pb09qMxz1Xb1kLqgzn1RyH7JUXW52lr5e/Kqi9qpto7V1atuUzfnARrV7jEib1T76gG2qxdGmXyiekkt1GswPTtek0aBfJp6YySGBfWg2tPQ0FAYgf1stUfdmdcjarbYJEniKIq6gY/Aw+zWHAC+p2labGpqiorFYgGYCEzN7oQdQClN07O1/EfDyGgC0ALMBdYAi4FyK+4H3gLPsxfR1zRNi+NP7nH5J+QntnXe5B5mpfQAAAAASUVORK5CYII=">
 
 <!-- CSS -->
-<link rel="stylesheet" type="text/css" href="../../nimdoc.out.css?v=2.2.10">
+<link rel="stylesheet" type="text/css" href="../../nimdoc.out.css?v=2.2.12">
 
 <!-- JS -->
-<script type="text/javascript" src="../../dochack.js?v=2.2.10"></script>
+<script type="text/javascript" src="../../dochack.js?v=2.2.12"></script>
 </head>
 <body>
   <div class="document" id="documentId">
@@ -67,12 +67,29 @@
   preserveComments*: bool
   sourceMap*: bool
   entryPoint*: string
-  outputPath*: string">BundleConfig</a></li>
+  outputPath*: string
+  format*: OutputFormat      ## Output wrapper format for the bundled JS. Defaults to fmtES.
+  moduleName*: string        ## Global/module name for iife/umd wrappers.
+                             ## Defaults to the entry file basename when empty.
+  externals*: seq[string] ## Bare specifiers left untouched (e.g. node builtins or
+                          ## packages provided by the host). Never resolved.
+  nodePaths*: seq[string]    ## Extra lookup roots checked before walked-up node_modules.">BundleConfig</a></li>
 <li><a class="reference" href="#JsGenOptions" title="JsGenOptions = object
   minify*: bool
   mangle*: bool
   preserveComments*: bool
-  sourceMap*: bool">JsGenOptions</a></li>
+  sourceMap*: bool
+  stripExports*: bool ## When true, codegen drops import/export statements and emits
+                      ## declarations without the `export` keyword (for wrapped formats).
+  preserveNames*: seq[string] ## Identifiers the mangler must leave untouched, e.g. a bundle
+                              ## wrapper global (`--name`). Empty by default.">JsGenOptions</a></li>
+<li><a class="reference" href="#OutputFormat" title="OutputFormat = enum
+  fmtES = &quot;es&quot;,             ## ES modules — native import/export preserved
+  fmtCJS = &quot;cjs&quot;,           ## CommonJS — module.exports / exports
+  fmtIIFE = &quot;iife&quot;,         ## Browser IIFE — var NAME = (function(exports){ ... })({})
+  fmtUMD = &quot;umd&quot;,           ## Universal — CJS/AMD/global factory wrapper
+  fmtAMD = &quot;amd&quot;,           ## AMD — define(['exports'], function(exports){ ... })
+  fmtSystem = &quot;system&quot;       ## SystemJS — System.register([], function(exports){ ... })">OutputFormat</a></li>
 
     </ul>
   </details>
@@ -119,7 +136,13 @@
   <span class="Identifier">preserveComments</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span>
   <span class="Identifier">sourceMap</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span>
   <span class="Identifier">entryPoint</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
-  <span class="Identifier">outputPath</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span></pre></dt>
+  <span class="Identifier">outputPath</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>
+  <span class="Identifier">format</span><span class="Operator">*</span><span class="Other">:</span> <a href="#OutputFormat"><span class="Identifier">OutputFormat</span></a>      <span class="Comment">## Output wrapper format for the bundled JS. Defaults to fmtES.</span>
+  <span class="Identifier">moduleName</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">string</span>        <span class="Comment">## Global/module name for iife/umd wrappers.</span>
+                             <span class="Comment">## Defaults to the entry file basename when empty.</span>
+  <span class="Identifier">externals</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span> <span class="Comment">## Bare specifiers left untouched (e.g. node builtins or</span>
+                          <span class="Comment">## packages provided by the host). Never resolved.</span>
+  <span class="Identifier">nodePaths</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span>    <span class="Comment">## Extra lookup roots checked before walked-up node_modules.</span></pre></dt>
   <dd>
     
     
@@ -131,7 +154,25 @@
   <span class="Identifier">minify</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span>
   <span class="Identifier">mangle</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span>
   <span class="Identifier">preserveComments</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span>
-  <span class="Identifier">sourceMap</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span></pre></dt>
+  <span class="Identifier">sourceMap</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span>
+  <span class="Identifier">stripExports</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">bool</span> <span class="Comment">## When true, codegen drops import/export statements and emits</span>
+                      <span class="Comment">## declarations without the `export` keyword (for wrapped formats).</span>
+  <span class="Identifier">preserveNames</span><span class="Operator">*</span><span class="Other">:</span> <span class="Identifier">seq</span><span class="Other">[</span><span class="Identifier">string</span><span class="Other">]</span> <span class="Comment">## Identifiers the mangler must leave untouched, e.g. a bundle</span>
+                              <span class="Comment">## wrapper global (`--name`). Empty by default.</span></pre></dt>
+  <dd>
+    
+    
+    
+  </dd>
+</div>
+<div id="OutputFormat">
+  <dt><pre><a href="#OutputFormat"><span class="Identifier">OutputFormat</span></a> <span class="Other">=</span> <span class="Keyword">enum</span>
+  <span class="Identifier">fmtES</span> <span class="Other">=</span> <span class="StringLit">&quot;es&quot;</span><span class="Other">,</span>             <span class="Comment">## ES modules — native import/export preserved</span>
+  <span class="Identifier">fmtCJS</span> <span class="Other">=</span> <span class="StringLit">&quot;cjs&quot;</span><span class="Other">,</span>           <span class="Comment">## CommonJS — module.exports / exports</span>
+  <span class="Identifier">fmtIIFE</span> <span class="Other">=</span> <span class="StringLit">&quot;iife&quot;</span><span class="Other">,</span>         <span class="Comment">## Browser IIFE — var NAME = (function(exports){ ... })({})</span>
+  <span class="Identifier">fmtUMD</span> <span class="Other">=</span> <span class="StringLit">&quot;umd&quot;</span><span class="Other">,</span>           <span class="Comment">## Universal — CJS/AMD/global factory wrapper</span>
+  <span class="Identifier">fmtAMD</span> <span class="Other">=</span> <span class="StringLit">&quot;amd&quot;</span><span class="Other">,</span>           <span class="Comment">## AMD — define(['exports'], function(exports){ ... })</span>
+  <span class="Identifier">fmtSystem</span> <span class="Other">=</span> <span class="StringLit">&quot;system&quot;</span>       <span class="Comment">## SystemJS — System.register([], function(exports){ ... })</span></pre></dt>
   <dd>
     
     
@@ -187,7 +228,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-07-11 13:23:59 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-22 11:06:11 UTC</small>
       </div>
     </div>
   </div>

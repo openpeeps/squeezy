@@ -1,3 +1,4 @@
 nimTitle	minifier	squeezy/bundle/js/minifier.html	module squeezy/bundle/js/minifier		0
-nim	parseJsString	squeezy/bundle/js/minifier.html#parseJsString,string	proc parseJsString(code: string): OpenAstProgram		15
-nim	minifyJs	squeezy/bundle/js/minifier.html#minifyJs,string,JsGenOptions,string	proc minifyJs(code: string; opts: JsGenOptions = defaultJsGenOpts();\n         sourceFile: string = ""): tuple[code: string, sourceMapRaw: string]		27
+nim	parseJsString	squeezy/bundle/js/minifier.html#parseJsString,string	proc parseJsString(code: string): OpenAstProgram		27
+nim	minifyJs	squeezy/bundle/js/minifier.html#minifyJs,string,JsGenOptions,string	proc minifyJs(code: string; opts: JsGenOptions = defaultJsGenOpts();\n         sourceFile: string = ""): tuple[code: string, sourceMapRaw: string]		39
+nim	minifyJsProgram	squeezy/bundle/js/minifier.html#minifyJsProgram,OpenAstProgram,JsGenOptions	proc minifyJsProgram(program: OpenAstProgram; opts: JsGenOptions = defaultJsGenOpts()): tuple[\n    code: string, sourceMapRaw: string]		43

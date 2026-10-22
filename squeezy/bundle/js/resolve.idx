@@ -1,0 +1,9 @@
+nimTitle	resolve	squeezy/bundle/js/resolve.html	module squeezy/bundle/js/resolve		0
+nim	ResolveOpts	squeezy/bundle/js/resolve.html#ResolveOpts	object ResolveOpts		15
+nim	defaultResolveOpts	squeezy/bundle/js/resolve.html#defaultResolveOpts	proc defaultResolveOpts(): ResolveOpts		27
+nim	stripQuotes	squeezy/bundle/js/resolve.html#stripQuotes,string	proc stripQuotes(s: string): string		46
+nim	isBuiltinSpecifier	squeezy/bundle/js/resolve.html#isBuiltinSpecifier,string	proc isBuiltinSpecifier(specifier: string): bool		55
+nim	isRelativeSpecifier	squeezy/bundle/js/resolve.html#isRelativeSpecifier,string	proc isRelativeSpecifier(specifier: string): bool		63
+nim	splitPkgSpecifier	squeezy/bundle/js/resolve.html#splitPkgSpecifier,string	proc splitPkgSpecifier(specifier: string): tuple[name, subPath: string]		68
+nim	readPackageJson	squeezy/bundle/js/resolve.html#readPackageJson,string	proc readPackageJson(dir: string): JsonNode		83
+nim	resolveSpecifier	squeezy/bundle/js/resolve.html#resolveSpecifier,string,string,ResolveOpts	proc resolveSpecifier(importer: string; specifier: string;\n                 opts: ResolveOpts = defaultResolveOpts()): string		226

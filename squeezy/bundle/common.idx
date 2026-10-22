@@ -1,6 +1,13 @@
 nimTitle	common	squeezy/bundle/common.html	module squeezy/bundle/common		0
-nim	BundleConfig	squeezy/bundle/common.html#BundleConfig	object BundleConfig		8
-nim	JsGenOptions	squeezy/bundle/common.html#JsGenOptions	object JsGenOptions		19
-nim	defaultConfig	squeezy/bundle/common.html#defaultConfig	proc defaultConfig(): BundleConfig		25
-nim	defaultJsGenOpts	squeezy/bundle/common.html#defaultJsGenOpts	proc defaultJsGenOpts(): JsGenOptions		28
-nim	jsGenOptsWithMangle	squeezy/bundle/common.html#jsGenOptsWithMangle	proc jsGenOptsWithMangle(): JsGenOptions		31
+nim	fmtES	squeezy/bundle/common.html#fmtES	OutputFormat.fmtES		8
+nim	fmtCJS	squeezy/bundle/common.html#fmtCJS	OutputFormat.fmtCJS		8
+nim	fmtIIFE	squeezy/bundle/common.html#fmtIIFE	OutputFormat.fmtIIFE		8
+nim	fmtUMD	squeezy/bundle/common.html#fmtUMD	OutputFormat.fmtUMD		8
+nim	fmtAMD	squeezy/bundle/common.html#fmtAMD	OutputFormat.fmtAMD		8
+nim	fmtSystem	squeezy/bundle/common.html#fmtSystem	OutputFormat.fmtSystem		8
+nim	OutputFormat	squeezy/bundle/common.html#OutputFormat	enum OutputFormat		8
+nim	BundleConfig	squeezy/bundle/common.html#BundleConfig	object BundleConfig		16
+nim	JsGenOptions	squeezy/bundle/common.html#JsGenOptions	object JsGenOptions		37
+nim	defaultConfig	squeezy/bundle/common.html#defaultConfig	proc defaultConfig(): BundleConfig		49
+nim	defaultJsGenOpts	squeezy/bundle/common.html#defaultJsGenOpts	proc defaultJsGenOpts(): JsGenOptions		52
+nim	jsGenOptsWithMangle	squeezy/bundle/common.html#jsGenOptsWithMangle	proc jsGenOptsWithMangle(): JsGenOptions		55
