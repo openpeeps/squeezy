@@ -41,5 +41,11 @@ binpath="$(find /tmp/esbuild-pkg/package -type f -name "$bin" | head -n 1)"
 [ -n "$binpath" ] || { echo "ERROR: $bin not found in tarball" >&2; exit 1; }
 install -m 0755 "$binpath" "$dest/$bin"
 rm -rf /tmp/esbuild.tgz /tmp/esbuild-pkg
-echo "$dest" >> "$GITHUB_PATH"
+if [ "$os" = "Windows" ]; then
+  # Native processes (like the test binary) consume the Windows PATH, where
+  # an msys (/c/...) entry does not resolve, so convert it first.
+  cygpath -w "$dest" >> "$GITHUB_PATH"
+else
+  echo "$dest" >> "$GITHUB_PATH"
+fi
 "$dest/$bin" --version
