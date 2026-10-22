@@ -103,7 +103,7 @@
   <div id="minifyJs,string,JsGenOptions,string">
   <dt><pre><span class="Keyword">proc</span> <a href="#minifyJs%2Cstring%2CJsGenOptions%2Cstring"><span class="Identifier">minifyJs</span></a><span class="Other">(</span><span class="Identifier">code</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">;</span> <span class="Identifier">opts</span><span class="Other">:</span> <a href="../common.html#JsGenOptions"><span class="Identifier">JsGenOptions</span></a> <span class="Other">=</span> <span class="Identifier">defaultJsGenOpts</span><span class="Other">(</span><span class="Other">)</span><span class="Other">;</span>
               <span class="Identifier">sourceFile</span><span class="Other">:</span> <span class="Identifier">string</span> <span class="Other">=</span> <span class="StringLit">&quot;&quot;</span><span class="Other">)</span><span class="Other">:</span> <span class="Keyword">tuple</span><span class="Other">[</span><span class="Identifier">code</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">,</span> <span class="Identifier">sourceMapRaw</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">]</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span>
-    <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">DynasmError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OpenAstParsingError</span><span class="Other">]</span><span class="Other">,</span>
+    <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span> <span class="Identifier">DynasmError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OpenAstParsingError</span><span class="Other">]</span><span class="Other">,</span>
     <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
@@ -129,8 +129,8 @@
 </div>
 <div id="parseJsString-procs-all">
   <div id="parseJsString,string">
-  <dt><pre><span class="Keyword">proc</span> <a href="#parseJsString%2Cstring"><span class="Identifier">parseJsString</span></a><span class="Other">(</span><span class="Identifier">code</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">OpenAstProgram</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">IOError</span><span class="Other">,</span>
-    <span class="Identifier">DynasmError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OpenAstParsingError</span><span class="Other">]</span><span class="Other">,</span>
+  <dt><pre><span class="Keyword">proc</span> <a href="#parseJsString%2Cstring"><span class="Identifier">parseJsString</span></a><span class="Other">(</span><span class="Identifier">code</span><span class="Other">:</span> <span class="Identifier">string</span><span class="Other">)</span><span class="Other">:</span> <span class="Identifier">OpenAstProgram</span> {.<span><span class="Other pragmadots">...</span></span><span class="pragmawrap"><span class="Identifier">raises</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">KeyError</span><span class="Other">,</span> <span class="Identifier">IOError</span><span class="Other">,</span>
+    <span class="Identifier">DynasmError</span><span class="Other">,</span> <span class="Identifier">ValueError</span><span class="Other">,</span> <span class="Identifier">Exception</span><span class="Other">,</span> <span class="Identifier">OpenAstParsingError</span><span class="Other">]</span><span class="Other">,</span>
     <span class="Identifier">tags</span><span class="Other">:</span> <span class="Other">[</span><span class="Identifier">RootEffect</span><span class="Other">]</span><span class="Other">,</span> <span class="Identifier">forbids</span><span class="Other">:</span> <span class="Other">[</span><span class="Other">]</span></span>.}</pre></dt>
   <dd>
     
@@ -150,7 +150,7 @@
       <div class="twelve-columns footer">
         <span class="nim-sprite"></span>
         <br>
-        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-22 11:25:31 UTC</small>
+        <small style="color: var(--hint);">Made with Nim. Generated: 2026-10-22 11:50:05 UTC</small>
       </div>
     </div>
   </div>
