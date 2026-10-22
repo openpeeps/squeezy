@@ -14,5 +14,5 @@ binDir        = "bin"
 # Dependencies
 
 requires "nim >= 2.0.0"
-requires "openparser >= 0.1.5"
-requires "sweetsyntax >= 0.2.2"
+requires "openparser >= 0.4.1"
+requires "sweetsyntax >= 0.2.3"

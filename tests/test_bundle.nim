@@ -27,7 +27,7 @@ suite "JS code generator":
   test "generates if/else":
     let code = "if (x > 0) { return x; } else { return -x; }"
     let result = minify(code, "js")
-    check result == "if(x>0){return x}else{return -x}"
+    check result == "if(x>0){return x}else{return-x}"
 
   test "generates for loop":
     let code = "for (var i = 0; i < 10; i++) { console.log(i); }"
@@ -57,7 +57,7 @@ suite "JS code generator":
   test "generates boolean and null":
     let code = "var a = true, b = false, c = null;"
     let result = minify(code, "js")
-    check result == "var a=true,b=false,c=null"
+    check result == "var a=!0,b=!1,c=null"
 
   test "preserves undefined distinctly from null":
     let code = "var u = undefined; if (u === undefined) { u = null; }"
@@ -73,7 +73,7 @@ suite "JS code generator":
 
   test "parses object method defaults and rest":
     check minify("var o = { fetch(u, push = true, cb) { return cb(u); } };",
-      "js") == "var o={fetch(u,push=true,cb){return cb(u)}}"
+      "js") == "var o={fetch(u,push=!0,cb){return cb(u)}}"
     check minify("var o = { m(...args) { return args; } };", "js") ==
       "var o={m(...args){return args}}"
 
@@ -322,7 +322,7 @@ suite "JS mangler":
   test "mangles multi-char function parameters":
     let code = "function add(first, second) { return first + second; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function add(a,b){return a+b}"
+    check result == "function a(a,b){return a+b}"
 
   test "mangles local variables":
     let code = """
@@ -334,17 +334,17 @@ suite "JS mangler":
       }
     """
     let result = minify(code, "js", mangleOpts)
-    check result == "function run(){var a=0;let b=10;const c=100;return a+b+c}"
+    check result == "function a(){var a=0;let b=10;const c=100;return a+b+c}"
 
   test "preserves console and globals":
     let code = "function log(message) { console.log(message); }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function log(a){console.log(a)}"
+    check result == "function a(a){console.log(a)}"
 
   test "preserves property names in dot access":
     let code = "function get(obj) { return obj.name; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function get(a){return a.name}"
+    check result == "function a(a){return a.name}"
 
   test "preserves function names and exports":
     let code = "export function calculate(first, second) { return first + second; }"
@@ -354,7 +354,7 @@ suite "JS mangler":
   test "mangles for-loop variable":
     let code = "function f() { for (var index = 0; index < 10; index++) {} }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function f(){for(var a=0;a<10;a++){}}"
+    check result == "function a(){for(var a=0;a<10;a++){}}"
 
   test "mangles nested function scopes":
     let code = """
@@ -366,12 +366,12 @@ suite "JS mangler":
       }
     """
     let result = minify(code, "js", mangleOpts)
-    check result == "function outer(a){function inner(b){return a+b}return inner}"
+    check result == "function a(a){function b(b){return a+b}return b}"
 
   test "preserves object literal keys":
     let code = "function f() { var obj = {name: 'test'}; return obj.name; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function f(){var a={name:\"test\"};return a.name}"
+    check result == "function a(){var a={name:\"test\"};return a.name}"
 
   test "preserves known API globals":
     let code = """
@@ -383,12 +383,12 @@ suite "JS mangler":
       }
     """
     let result = minify(code, "js", mangleOpts)
-    check result == "function f(){var a=Math.random();var b=JSON.stringify(a);var c=Date.now();return c}"
+    check result == "function a(){var a=Math.random(),b=JSON.stringify(a),c=Date.now();return c}"
 
-  test "single-char names stay unchanged":
+  test "mangles single-char function names":
     let code = "function f(a, b) { return a + b; }"
     let result = minify(code, "js", mangleOpts)
-    check result == "function f(a,b){return a+b}"
+    check result == "function c(a,b){return a+b}"
 
   test "mangle produces shorter output":
     let plain = BundleConfig(minify: true, mangle: false)
@@ -397,6 +397,13 @@ suite "JS mangler":
     let mangledResult = minify(code, "js", mangleOpts)
     check mangledResult.len < plainResult.len
     check "firstParam" notin mangledResult
+
+  test "recursive references keep distinct names":
+    # A self-reference observes the outer binding, so the parameter must
+    # not reuse the function name's short (R2 shadowing rule).
+    let code = "function fact(n) { return n <= 1 ? 1 : n * fact(n - 1); }"
+    let result = minify(code, "js", mangleOpts)
+    check result == "function a(b){return b<=1?1:b*a(b-1)}"
 
 suite "Source map":
   let sm = newSourceMap("output.js")

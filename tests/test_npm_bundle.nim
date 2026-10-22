@@ -72,7 +72,7 @@ suite "npm-bundle fixture":
     check result.startsWith("var Fixture=")
     check not result.contains("firstCount")
     check not result.contains("combinedTotal")
-    check result.contains("exports.totalize=totalize")
+    check result.contains(".totalize=")
 
   test "iife bundle executes under node":
     let node = findExe("node")

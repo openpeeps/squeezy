@@ -52,7 +52,11 @@ proc track(ctx: var GenContext, n: Node, addName: bool = false) {.inline.} =
   if ctx.sourceMap != nil and n != nil:
     var nameIdx = -1
     if addName and n.kind == nkIdent:
-      let name = n.name
+      # With whole-bundle mangling the AST carries final (short) names;
+      # the map's `names` must still show the pre-rename originals.
+      let name =
+        if ctx.mangler != nil and ctx.mangler.trackOrig: ctx.mangler.origName(n)
+        else: n.name
       nameIdx = ctx.sourceMap.addName(name)
     ctx.sourceMap.addMapping(ctx.genLine, ctx.genCol, n.ln, n.col, 0, nameIdx)
 
@@ -139,6 +143,70 @@ proc isWordPrefixOp*(opName: string): bool {.inline.} =
   of 6: opName == "typeof" or opName == "delete"
   else: false
 
+proc canonicalFloatStr*(s: string): string =
+  ## Minified canonical form of a float literal's text: `0.5` -> `.5`,
+  ## `10.0` -> `10`. Shared by emission and the tight-spacing predicate so
+  ## both agree on the first output character.
+  result = s
+  if result.len > 1 and result[0] == '0' and result[1] == '.':
+    result = result[1 .. ^1]
+  elif result.len > 2 and result[0] == '-' and result[1] == '0' and
+       result[2] == '.':
+    result = "-" & result[2 .. ^1]
+  if result == ".0":
+    result = "0"
+  elif result == "-.0":
+    result = "-0"
+  elif result.len > 2 and result[^2] == '.' and result[^1] == '0' and
+       'e' notin result and 'E' notin result:
+    result = result[0 .. ^3]
+
+proc returnOperandTight(n: Node): bool =
+  ## True when a `return`/`throw`/`case` operand needs no separating space:
+  ## its first emitted char cannot join an identifier (`return(`, `return[`,
+  ## `return"`, `return!0`, `return/.../`, `return{`). Anything starting with
+  ## an identifier char, digit or `.`-digit needs the space (`return0.5`
+  ## would lex as one identifier). Conservative: unknown shapes keep it.
+  if n.isNil:
+    return false
+  case n.kind
+  of nkCall:
+    if n.children.len > 0 and not n.children[0].isNil and
+       n.children[0].kind == nkIdent and n.children[0].name == "ternary" and
+       n.children.len > 1:
+      return returnOperandTight(n.children[1]) # condition leads
+    if n.children.len > 0 and not n.children[0].isNil and
+       n.children[0].kind == nkIdent and n.children[0].name == "spread":
+      return false
+    return true # parenthesized call
+  of nkArrayLit:
+    return true
+  of nkLitString:
+    return n.valStr.len > 0 and n.valStr[0] in {'"', '\'', '`'}
+  of nkLitBool, nkRegex:
+    return true
+  of nkLitInt:
+    let t = $n.valInt
+    return t.len > 0 and t[0] == '-'
+  of nkLitFloat:
+    let s = canonicalFloatStr($n.valFloat)
+    return s.len > 0 and (s[0] == '.' or s[0] == '-')
+  of nkBlock:
+    return true # object literal body
+  of nkPrefix:
+    if n.children.len > 0 and not n.children[0].isNil and
+       n.children[0].kind == nkIdent:
+      let op = n.children[0].name
+      return op == "!" or op == "~" or op == "+" or op == "-"
+    return false
+  of nkInfix:
+    # Recurse into the leftmost operand (its first char leads).
+    if n.children.len >= 2:
+      return returnOperandTight(n.children[1])
+    return false
+  else:
+    return false
+
 proc needsParens(childPrec, parentPrec: int, parentOp: string, isLhs: bool): bool =
   if childPrec < parentPrec: return true
   if childPrec > parentPrec: return false
@@ -174,6 +242,7 @@ proc isObjLiteral(n: Node): bool =
 proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: string = "", isLhs: bool = true)
 proc genStmt(ctx: var GenContext, n: Node)
 proc genBlockStmts(ctx: var GenContext, children: seq[Node])
+proc stripSemiBeforeBrace(ctx: var GenContext, lastChild: Node)
 
 proc unwrapComments(n: Node): Node =
   ## Peels nested nkCommentGroup wrappers off an expression.
@@ -261,6 +330,36 @@ proc isCommaExpr(n: Node): bool =
   not n.isNil and n.kind == nkStatement and n.children.len > 1 and
     not n.children[0].isNil and n.children[0].kind == nkIdent and
     n.children[0].name == "comma"
+
+proc needsCondParens(n: Node): bool =
+  ## Ternary conditions exclude assignment, comma, arrow and nested
+  ## ternaries (`(m = re.exec(s)) ? ...` must keep its parens: without them
+  ## the assignment swallows the branches and re-parses as `m = (...?...:...)`,
+  ## reading the variable before it is assigned). Mirrors the ShortCircuit
+  ## grammar; everything else re-parses identically bare.
+  let inner = unwrapComments(n)
+  if inner.isNil: return false
+  if isCommaExpr(inner): return true
+  if inner.kind == nkFunction: return true
+  if inner.kind == nkCall and inner.children.len > 0 and
+     not inner.children[0].isNil and inner.children[0].kind == nkIdent and
+     inner.children[0].name == "ternary":
+    return true # right-nested `(a?b:c)?d:e` would flatten without parens
+  if inner.kind == nkInfix and inner.children.len >= 3 and
+     not inner.children[0].isNil and inner.children[0].kind == nkIdent:
+    return getPrec(inner.children[0].name) == PrecAssign
+  if inner.kind == nkPrefix and inner.children.len > 0 and
+     not inner.children[0].isNil and inner.children[0].kind == nkIdent and
+     inner.children[0].name == "yield":
+    return true
+  false
+
+proc needsValueParens(n: Node): bool =
+  ## Comma expressions as operands that a bare comma would split
+  ## (`return (a, b)`, `throw (a, b)`, `=> (a, b)`, `x = (a, b)` all re-parse
+  ## with the comma escaping its group). Call/array arguments and var
+  ## initializers already wrap these; this covers the remaining value slots.
+  isCommaExpr(n)
 
 proc genExprList(ctx: var GenContext, nodes: seq[Node], startIdx: int = 0) =
   for i in startIdx ..< nodes.len:
@@ -424,19 +523,26 @@ proc genObjLiteral(ctx: var GenContext, n: Node) =
       if child.children.len >= 3 and not child.children[2].isNil and
          child.children[2].kind == nkIdent and child.children[2].name == "=":
         # Destructuring default `{ key = default }`: kept verbatim,
-        # never degraded into `key: default`.
+        # never degraded into `key: default`. A comma default keeps its
+        # parens (`{a = (b, c)}` bare would read `c` as another member).
         genMemberKey(ctx, key)
         ctx.add('=')
-        genNode(ctx, val, PrecAssign)
+        if needsValueParens(val):
+          ctx.add('(')
+          genNode(ctx, val, 0)
+          ctx.add(')')
+        else:
+          genNode(ctx, val, PrecAssign)
       elif val.kind == nkFunction and isMethodShorthand(val) and
           not isAsyncArrow(val):
         genMethod(ctx, val, key)
       elif val.kind == nkEmpty:
         # Bare shorthand `{a}` — parser expands to `key:key`; emit compact form
         genMemberKey(ctx, key)
-      elif key.kind == nkIdent and val.kind == nkIdent and key.name == val.name and
-           (ctx.mangler.isNil or ctx.mangler.getMangled(key.name) == key.name):
-        # ES2015 shorthand property (only safe when the value keeps its name)
+      elif key.kind == nkIdent and val.kind == nkIdent and key.name == val.name:
+        # ES2015 shorthand: `{a: a}` and `{a}` mean exactly the same thing,
+        # so equal texts always collapse. (Names are final here: the scoped
+        # pass renames in place before codegen, leaving no mapping to apply.)
         ctx.add(key.name)
       else:
         genMemberKey(ctx, key)
@@ -447,7 +553,12 @@ proc genObjLiteral(ctx: var GenContext, n: Node) =
          child.children[0].name == "spread":
         ctx.add("...")
         if child.children.len > 1:
-          genNode(ctx, child.children[1], PrecAssign)
+          if needsValueParens(child.children[1]):
+            ctx.add('(')
+            genNode(ctx, child.children[1], 0)
+            ctx.add(')')
+          else:
+            genNode(ctx, child.children[1], PrecAssign)
     of nkFunction:
       genNode(ctx, child)
     else:
@@ -527,7 +638,14 @@ proc genFn(ctx: var GenContext, n: Node) =
       elif not body.isNil and body.kind == nkEmpty:
         discard
       elif not body.isNil:
-        genNode(ctx, body, PrecAssign)
+        # A concise comma body `() => (a, b)` must keep its parens: bare it
+        # splits into two parameters/body pieces.
+        if needsValueParens(body):
+          ctx.add('(')
+          genNode(ctx, body, 0)
+          ctx.add(')')
+        else:
+          genNode(ctx, body, PrecAssign)
 
 proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: string = "", isLhs: bool = true) =
   if n.isNil:
@@ -545,14 +663,21 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     ctx.add("null")
   of nkLitBool:
     ctx.track(n)
-    ctx.add(if n.valBool: "true" else: "false")
+    # `!0`/`!1` are shorter than `true`/`false` and valid wherever a value
+    # is (keys lex as idents, never bools, so no key position can hit this).
+    if ctx.opts.minify:
+      ctx.add(if n.valBool: "!0" else: "!1")
+    else:
+      ctx.add(if n.valBool: "true" else: "false")
   of nkLitInt:
     ctx.track(n)
     ctx.add($n.valInt)
   of nkLitFloat:
     ctx.track(n)
-    let s = $n.valFloat
-    ctx.add(s)
+    if ctx.opts.minify:
+      ctx.add(canonicalFloatStr($n.valFloat))
+    else:
+      ctx.add($n.valFloat)
   of nkLitString:
     ctx.track(n)
     let raw = n.valStr
@@ -604,8 +729,10 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     ctx.add(n.valBigInt & "n")
   of nkIdent:
     ctx.track(n, addName=true)
-    let name = if ctx.mangler != nil: ctx.mangler.getMangled(n.name) else: n.name
-    ctx.add(name)
+    # Names are final: the scoped pass renames in place before codegen, so
+    # no flat-table lookup applies here (it would re-map generated shorts
+    # that collide with other originals).
+    ctx.add(n.name)
   of nkVarTy: ctx.add(n.name)
   of nkRegex:
     if n.children.len > 0 and n.children[0].kind == nkLitString:
@@ -625,7 +752,12 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     if opName == "spread":
       ctx.add("...")
       if not operand.isNil:
-        genNode(ctx, operand, PrecAssign)
+        if needsValueParens(operand):
+          ctx.add('(')
+          genNode(ctx, operand, 0)
+          ctx.add(')')
+        else:
+          genNode(ctx, operand, PrecAssign)
     elif opName == "await":
       ctx.add("await ")
       if not operand.isNil:
@@ -691,7 +823,14 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
           else:
             genNode(ctx, lhs, prec, op, false)
             ctx.add(op)
-            genNode(ctx, rhs, prec, op, true)
+            if isCommaExpr(rhs):
+              # `x = (a, b)` must keep its parens: bare it re-parses as
+              # `(x = a), b`, assigning the wrong value.
+              ctx.add('(')
+              genNode(ctx, rhs, 0)
+              ctx.add(')')
+            else:
+              genNode(ctx, rhs, prec, op, true)
         else:
           # Unwrap each side once: the old code re-ran unwrapComments up to
           # three times per side across these checks.
@@ -755,7 +894,8 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
   of nkBracketExpr:
     if n.children.len >= 2:
       let first = n.children[0]
-      if first.kind in {nkIdent, nkDotExpr, nkCall, nkBracketExpr, nkFunction, nkInfix}:
+      if first.kind in {nkIdent, nkDotExpr, nkCall, nkTagCall, nkBracketExpr,
+                          nkFunction, nkInfix}:
         genTightOperand(ctx, first, PrecMember - 1)
         ctx.add('[')
         genExprList(ctx, n.children, 1)
@@ -779,12 +919,27 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       else:
         ctx.add(':')
       genNode(ctx, n.children[1], PrecAssign)
+  of nkTagCall:
+    # Tagged template: the callee and template stay adjacent with no call
+    # parens. Wrapping would demote the tag protocol (strings, values...)
+    # to a plain cooked-string call. Tags bind tightest, so bare emission
+    # re-parses identically in every legal position.
+    ctx.track(n)
+    if n.children.len >= 1:
+      genTightOperand(ctx, n.children[0], PrecCall)
+    if n.children.len >= 2:
+      genNode(ctx, n.children[1], PrecAssign)
   of nkCall:
     ctx.track(n)
     if n.children.len > 0 and n.children[0].kind == nkIdent:
       if n.children[0].name == "ternary":
         if n.children.len >= 4:
-          genNode(ctx, n.children[1], PrecCond)
+          if needsCondParens(n.children[1]):
+            ctx.add('(')
+            genNode(ctx, n.children[1], 0)
+            ctx.add(')')
+          else:
+            genNode(ctx, n.children[1], PrecCond)
           ctx.add('?')
           # Comma expressions as branches need their grouping parens back
           if isCommaExpr(n.children[2]):
@@ -804,7 +959,12 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
       elif n.children[0].name == "spread":
         ctx.add("...")
         if n.children.len > 1:
-          genNode(ctx, n.children[1], PrecAssign)
+          if needsValueParens(n.children[1]):
+            ctx.add('(')
+            genNode(ctx, n.children[1], 0)
+            ctx.add(')')
+          else:
+            genNode(ctx, n.children[1], PrecAssign)
         return
     if n.children.len > 0:
       genTightOperand(ctx, n.children[0], PrecCall)
@@ -816,8 +976,16 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     ctx.track(n)
     ctx.add("return")
     if n.children.len > 0:
-      ctx.add(' ')
-      genNode(ctx, n.children[0], PrecAssign)
+      if ctx.opts.minify and returnOperandTight(n.children[0]):
+        genNode(ctx, n.children[0], PrecAssign)
+      else:
+        ctx.add(' ')
+        if needsValueParens(n.children[0]):
+          ctx.add('(')
+          genNode(ctx, n.children[0], 0)
+          ctx.add(')')
+        else:
+          genNode(ctx, n.children[0], PrecAssign)
   of nkImport:
     if ctx.opts.stripExports:
       # Wrapped formats: imports are inlined as sibling modules — drop the statement
@@ -917,6 +1085,14 @@ proc genNode(ctx: var GenContext, n: Node, parentPrec: int = -1, parentOp: strin
     else:
       ctx.add('{')
       genBlockStmts(ctx, n.children)
+      var lastChild: Node = nil
+      for j in countdown(n.children.len - 1, 0):
+        if not n.children[j].isNil and n.children[j].kind != nkEmpty and
+           n.children[j].kind != nkInlineComment and
+           n.children[j].kind != nkDocComment:
+          lastChild = n.children[j]
+          break
+      stripSemiBeforeBrace(ctx, lastChild)
       ctx.add('}')
   of nkStatement:
     genStmt(ctx, n)
@@ -1160,16 +1336,26 @@ proc genStmt(ctx: var GenContext, n: Node) =
     if n.children.len > 2:
       let body = n.children[2]
       ctx.add('{')
+      var lastCase: Node = nil
       for caseNode in body.children:
+        if not caseNode.isNil and caseNode.kind != nkEmpty and
+           caseNode.kind != nkInlineComment and
+           caseNode.kind != nkDocComment:
+          lastCase = caseNode
         if caseNode.kind == nkStatement and caseNode.children.len > 0 and
            not caseNode.children[0].isNil and
            caseNode.children[0].kind == nkIdent:
           let caseKw = caseNode.children[0].name
           case caseKw
           of "case":
-            ctx.add("case ")
-            if caseNode.children.len > 1:
+            if caseNode.children.len > 1 and ctx.opts.minify and
+               returnOperandTight(caseNode.children[1]):
+              ctx.add("case")
               genNode(ctx, caseNode.children[1], PrecAssign)
+            else:
+              ctx.add("case ")
+              if caseNode.children.len > 1:
+                genNode(ctx, caseNode.children[1], PrecAssign)
             ctx.add(':')
             for i in 2 ..< caseNode.children.len:
               let stmt = caseNode.children[i]
@@ -1190,6 +1376,7 @@ proc genStmt(ctx: var GenContext, n: Node) =
             discard
         else:
           genStmt(ctx, caseNode)
+      stripSemiBeforeBrace(ctx, lastCase)
       ctx.add('}')
 
   of "try":
@@ -1298,6 +1485,14 @@ proc genStmt(ctx: var GenContext, n: Node) =
               genNode(ctx, val, PrecAssign)
             if memberIdx < members.len:
               ctx.add(';')
+        var lastMember: Node = nil
+        for j in countdown(members.len - 1, 0):
+          if not members[j].isNil and members[j].kind != nkEmpty and
+             members[j].kind != nkInlineComment and
+             members[j].kind != nkDocComment:
+            lastMember = members[j]
+            break
+        stripSemiBeforeBrace(ctx, lastMember)
         ctx.add('}')
 
   of "export":
@@ -1378,8 +1573,16 @@ proc genStmt(ctx: var GenContext, n: Node) =
   of "throw":
     ctx.add("throw")
     if n.children.len > 1:
-      ctx.add(' ')
-      genNode(ctx, n.children[1], PrecAssign)
+      if ctx.opts.minify and returnOperandTight(n.children[1]):
+        genNode(ctx, n.children[1], PrecAssign)
+      else:
+        ctx.add(' ')
+        if needsValueParens(n.children[1]):
+          ctx.add('(')
+          genNode(ctx, n.children[1], 0)
+          ctx.add(')')
+        else:
+          genNode(ctx, n.children[1], PrecAssign)
 
   of "debugger":
     ctx.add("debugger")
@@ -1400,6 +1603,84 @@ proc genStmt(ctx: var GenContext, n: Node) =
 
   else:
     genNode(ctx, n, -1)
+
+proc isEmptyishStmt(n: Node): bool {.inline.} =
+  n.isNil or n.kind == nkEmpty
+
+proc endsWithEmptyBody(n: Node): bool =
+  ## True when `n`'s emission ends with a `;` that IS an empty statement
+  ## (a required body) rather than a terminator. Only those keep their `;`
+  ## before a closing brace; every other trailing `;` drops (ASI inserts it).
+  ## Unknown shapes default to keeping (safe): stripping is purely savings.
+  if isEmptyishStmt(n):
+    return true
+  if n.kind == nkCommentGroup:
+    # Comments emit nothing; look through to the wrapped statement.
+    if n.children.len > 0:
+      return endsWithEmptyBody(n.children[0])
+    return true
+  if n.kind != nkStatement or n.children.len == 0:
+    # Plain expressions, blocks, functions: any trailing `;` terminates.
+    return false
+  if n.children[0].isNil or n.children[0].kind != nkIdent:
+    return true
+  let kw = n.children[0].name
+  if kw == "if":
+    # Final else-side body decides; an absent one leaves the then-body.
+    var last: Node = nil
+    if n.children.len > 2:
+      last = n.children[2]
+    var i = 3
+    while i < n.children.len:
+      let c = n.children[i]
+      if not c.isNil and c.kind != nkEmpty:
+        last = c
+      inc i
+    if last.isNil:
+      return true
+    if last.kind == nkStatement and last.children.len > 0 and
+       not last.children[0].isNil and last.children[0].kind == nkIdent and
+       (last.children[0].name == "if" or last.children[0].name == "else"):
+      return endsWithEmptyBody(last)
+    if last.kind == nkBlock:
+      return false
+    return endsWithEmptyBody(last)
+  if kw == "else":
+    # Explicit else wrapper ["else", body]: the body decides.
+    if n.children.len > 1:
+      return endsWithEmptyBody(n.children[1])
+    return true
+  if kw == "while" or kw == "for" or kw == "with" or kw == "label":
+    # Body is always last; a missing one emitted no `;` (strip is a no-op).
+    if n.children.len == 0:
+      return true
+    return endsWithEmptyBody(n.children[^1])
+  if kw == "case" or kw == "default":
+    # Empty case bodies emit nothing (genStmt is silent on empties), so a
+    # trailing `;` may still terminate an `if(x);` body: check the last one.
+    var last: Node = nil
+    for i in 1 ..< n.children.len:
+      if not n.children[i].isNil and n.children[i].kind != nkEmpty:
+        last = n.children[i]
+    if last.isNil:
+      return false
+    return endsWithEmptyBody(last)
+  if kw in ["var", "let", "const", "return", "throw", "break", "continue",
+            "debugger", "comma", "computed", "do-while", "switch", "try",
+            "except", "finally", "field", "static-block", "yield", "import",
+            "export", "function", "async"]:
+    return false
+  true
+
+proc stripSemiBeforeBrace(ctx: var GenContext, lastChild: Node) =
+  ## Drop a trailing `;` before a closing `}` in minify mode, unless it is
+  ## itself an empty statement body (`if(x);}`, `while(x);}` stay intact;
+  ## ASI re-inserts every dropped terminator).
+  if not ctx.opts.minify:
+    return
+  if ctx.result.len > 0 and ctx.result[^1] == ';' and
+     not endsWithEmptyBody(lastChild):
+    ctx.result.setLen(ctx.result.len - 1)
 
 proc restIsEmpty(children: seq[Node], fromIdx: int): bool =
   ## True when every node from `fromIdx` on produces no output
@@ -1450,10 +1731,20 @@ proc genBlockStmts(ctx: var GenContext, children: seq[Node]) =
             ctx.add(',')
           genNode(ctx, decl, PrecAssign)
         var nxt: Node = nil
-        if i < children.len: nxt = children[i]
+        var nxtIdx = i
+        # Multi-line sources separate statements with empty placeholders;
+        # look past those (never past comments, which must keep their place
+        # when preserved) for a joinable same-keyword declaration.
+        while nxtIdx < children.len:
+          let cand = children[nxtIdx]
+          if cand.isNil or cand.kind == nkEmpty:
+            inc nxtIdx
+            continue
+          nxt = cand
+          break
         if nxt != nil and isDeclStmt(nxt) and nxt.children.len > 0 and
            not nxt.children[0].isNil and nxt.children[0].name == kwName:
-          inc i
+          i = nxtIdx + 1
           cur = nxt
         else:
           break
@@ -1484,9 +1775,10 @@ proc generateJs*(node: Node, opts: JsGenOptions, sourceFile: string = "", source
     discard ctx.sourceMap.addSource(sourceFile, sourceCode)
   if opts.mangle:
     ctx.mangler = newMangler()
+    ctx.mangler.trackOrig = opts.sourceMap
     for preserved in opts.preserveNames:
       preserveName(ctx.mangler, preserved)
-    walkAndCollect(ctx.mangler, node)
+    mangleScopes(ctx.mangler, node, opts.stripExports)
   genNode(ctx, node, -1)
   result.code = ctx.result
   if ctx.sourceMap != nil:
@@ -1499,11 +1791,10 @@ proc generateJs*(program: OpenAstProgram, opts: JsGenOptions, sourceFile: string
     discard ctx.sourceMap.addSource(sourceFile, sourceCode)
   if opts.mangle:
     ctx.mangler = newMangler()
+    ctx.mangler.trackOrig = opts.sourceMap
     for preserved in opts.preserveNames:
       preserveName(ctx.mangler, preserved)
-    for n in program.nodes:
-      if not n.isNil:
-        walkAndCollect(ctx.mangler, n)
+    mangleScopes(ctx.mangler, program.nodes, opts.stripExports)
   ctx.result = newStringOfCap(sourceCode.len + sourceCode.len shr 3)
   # Program level shares the block emission rules (declaration joining,
   # ASI-safe terminators); there is no closing brace at top level but the
