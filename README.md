@@ -92,24 +92,27 @@ squeezy --help
 
 Comparing Squeezy vs ESBuild (on d3.js library ~ 20k lines)
 ```
+[Suite] Benchmark
+  [OK] dependencies available
+
   Output sizes:
 
     Original:              587043 bytes
     squeezy-inline:        420081 bytes
     squeezy-bundle:        410815 bytes
     squeezy-bundle+mangle: 294480 bytes
-    esbuild:               281878 bytes
+    esbuild:               281796 bytes
   [OK] output size comparison + save
 
   mean over 5 runs:
-    squeezy-inline:        7.8 ms
-    squeezy-bundle:        55.6 ms
-    squeezy-bundle+mangle: 124.4 ms
-    esbuild:               60.7 ms
+    squeezy-inline:        8.1 ms
+    squeezy-bundle:        55.2 ms
+    squeezy-bundle+mangle: 132.2 ms
+    esbuild:               52.3 ms
   stages over 3 runs (parse/codegen/mangle):
-    parse:               49.9 ms
-    codegen:             5.6 ms
-    codegen+mangle:      74.5 ms
+    parse:               48.5 ms
+    codegen:             6.3 ms
+    codegen+mangle:      81.0 ms
   [OK] timing benchmark
 ```
 
