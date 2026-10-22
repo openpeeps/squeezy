@@ -1,98 +1,135 @@
-import std/[unittest, os, strutils, osproc]
-import squeezy/minify/inlinejs
+import std/[unittest, os, strutils, osproc, times]
+import bench_runner
 
-const
-  dataFile = "tests/data/d3.js"
-  runnerBin = "tests/bench_runner"
+# Benchmark corpus: d3.js v7.9.0 (unminified, ~20k lines), fetched from CDN
+# on first run and cached under tests/data (gitignored). Cached copy wins
+# so the suite stays offline-friendly once downloaded.
+const corpusUrl = "https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.js"
 
-proc checkDependencies: string =
-  if not fileExists(dataFile):
-    return "data file not found: " & dataFile
-  if execCmdEx("which hyperfine").exitCode != 0:
-    return "hyperfine not found in PATH"
-  if execCmdEx("which esbuild").exitCode != 0:
-    return "esbuild not found in PATH"
+let
+  dataFile = currentSourcePath().parentDir() / "data" / "d3.js"
+  outDir = currentSourcePath().parentDir() / "data"
+
+proc ensureCorpus(): string =
+  ## Returns "" when the corpus is ready, else a human-readable reason.
+  if fileExists(dataFile):
+    return ""
+  try:
+    createDir(outDir)
+  except OSError as e:
+    return "cannot create " & outDir & ": " & e.msg
+  # curl ships on every GH runner OS (and macOS/Linux dev machines);
+  # shelling out avoids linking OpenSSL into the test binary for one URL.
+  let (o, c) = execCmdEx("curl -fsSL " & quoteShell(corpusUrl) &
+    " -o " & quoteShell(dataFile))
+  if c != 0:
+    try:
+      removeFile(dataFile)
+    except OSError:
+      discard
+    return "corpus download failed (exit " & $c & "): " & o.strip()
+  try:
+    if getFileSize(dataFile) < 500_000:
+      removeFile(dataFile)
+      return "corpus download looks truncated, removed; retry test run"
+  except OSError as e:
+    return "cannot verify " & dataFile & ": " & e.msg
   ""
 
-proc runTool(cmd: string): tuple[output: string, exitCode: int] =
-  result = execCmdEx(cmd)
+proc esbuildBin(): string =
+  findExe("esbuild")
 
-proc runWithHyperfine(label, cmd: string): string =
-  let hfcmd = "hyperfine -w 3 --min-runs 5 " &
-    "-n " & quoteShell(label) & " " & quoteShell(cmd) & " 2>&1"
-  let (outp, code) = execCmdEx(hfcmd)
-  if code == -11:
-    result = "CRASHED (SIGSEGV - stack overflow in recursive AST walk)"
-  elif code != 0:
-    result = "FAILED (exit " & $code & ")"
-  else:
-    for line in outp.splitLines:
-      if line.strip.startsWith("Time") or
-         line.strip.startsWith("Range"):
-        result.add(line.strip & "\n")
+proc checkDependencies(): string =
+  result = ensureCorpus()
+  if result.len > 0:
+    return result
+  if not fileExists(dataFile):
+    return "data file not found: " & dataFile
+  if esbuildBin().len == 0:
+    return "esbuild not found in PATH"
+  result = ""
 
 suite "Benchmark":
   test "dependencies available":
-    let err = checkDependencies()
-    check err.len == 0
-    if err.len > 0:
-      skip()
+    check checkDependencies().len == 0
 
   test "output size comparison + save":
+    check checkDependencies().len == 0
     let code = readFile(dataFile)
-    let runner = "./" & runnerBin
-    let outDir = "tests/data"
 
-    let (inlineOut, inlineCode) = runTool(runner & " inline < " & dataFile)
-    check inlineCode == 0
-    writeFile(outDir & "/d3_squeezy_inline.js", inlineOut)
+    let inlineOut = minifyInline(code)
+    writeFile(outDir / "d3_squeezy_inline.js", inlineOut)
 
-    let (bundleOut, bundleCode) = runTool(runner & " bundle < " & dataFile)
-    if bundleCode == 0:
-      writeFile(outDir & "/d3_squeezy_bundle.js", bundleOut)
+    # The parse-based modes may fail on syntax the grammar does not cover
+    # yet; report that instead of masking it, like the old exit-code check.
+    var bundleOut, mangleOut = ""
+    try:
+      bundleOut = minifyBundle(code)
+      writeFile(outDir / "d3_squeezy_bundle.js", bundleOut)
+    except CatchableError as e:
+      echo "    squeezy-bundle:        FAILED (" & e.msg.splitLines()[0] & ")"
+    try:
+      mangleOut = minifyBundleMangle(code)
+      writeFile(outDir / "d3_squeezy_bundle+mangle.js", mangleOut)
+    except CatchableError as e:
+      echo "    squeezy-bundle+mangle: FAILED (" & e.msg.splitLines()[0] & ")"
 
-    let (mangleOut, mangleCode) = runTool(runner & " bundle+mangle < " & dataFile)
-    if mangleCode == 0:
-      writeFile(outDir & "/d3_squeezy_bundle+mangle.js", mangleOut)
-
-    let (esbOut, esbCode) = runTool("esbuild --minify " & dataFile)
+    let (esbOut, esbCode) = execCmdEx(
+      esbuildBin() & " --minify " & quoteShell(dataFile))
     check esbCode == 0
-    writeFile(outDir & "/d3_esbuild.js", esbOut)
+    writeFile(outDir / "d3_esbuild.js", esbOut)
+
+    check inlineOut.len > 0
+    check esbOut.len > 0
+    check inlineOut.len < code.len
+    check esbOut.len < code.len
 
     echo "\n  Output sizes:\n"
     echo "    Original:              " & $code.len & " bytes"
     echo "    squeezy-inline:        " & $inlineOut.len & " bytes"
-    if bundleCode == 0:
+    if bundleOut.len > 0:
       echo "    squeezy-bundle:        " & $bundleOut.len & " bytes"
     else:
       echo "    squeezy-bundle:        FAILED"
-    if mangleCode == 0:
+    if mangleOut.len > 0:
       echo "    squeezy-bundle+mangle: " & $mangleOut.len & " bytes"
     else:
       echo "    squeezy-bundle+mangle: FAILED"
     echo "    esbuild:               " & $esbOut.len & " bytes"
 
-  test "hyperfine benchmark":
-    let runner = "./" & runnerBin
+  test "timing benchmark":
+    check checkDependencies().len == 0
+    let code = readFile(dataFile)
+    const runs = 5
+
+    proc meanMs(fn: proc(): string {.closure.}): float =
+      var total = 0.0
+      for i in 1 .. runs:
+        let t0 = epochTime()
+        let s = fn()
+        total += epochTime() - t0
+        doAssert s.len > 0
+      total / runs * 1000.0
+
     echo ""
-    let r1 = runWithHyperfine("squeezy-inline", runner & " inline < " & dataFile)
-    echo "  squeezy-inline:"
-    for l in r1.splitLines:
-      if l.len > 0: echo "    " & l
+    echo "  mean over " & $runs & " runs:"
+    echo "    squeezy-inline:        " &
+      formatFloat(meanMs(proc(): string = minifyInline(code)),
+        ffDecimal, 1) & " ms"
+    echo "    squeezy-bundle:        " &
+      formatFloat(meanMs(proc(): string = minifyBundle(code)),
+        ffDecimal, 1) & " ms"
+    echo "    squeezy-bundle+mangle: " &
+      formatFloat(meanMs(proc(): string = minifyBundleMangle(code)),
+        ffDecimal, 1) & " ms"
 
-    let r2 = runWithHyperfine("squeezy-bundle", runner & " bundle < " & dataFile)
-    echo "  squeezy-bundle:"
-    for l in r2.splitLines:
-      if l.len > 0: echo "    " & l
-
-    let r3 = runWithHyperfine("squeezy-bundle+mangle", runner & " bundle+mangle < " & dataFile)
-    echo "  squeezy-bundle+mangle:"
-    for l in r3.splitLines:
-      if l.len > 0: echo "    " & l
-
-    let r4 = runWithHyperfine("esbuild", "esbuild --minify " & dataFile)
-    echo "  esbuild:"
-    for l in r4.splitLines:
-      if l.len > 0: echo "    " & l
-
-    check true
+    let esb = esbuildBin()
+    var esbTotal = 0.0
+    for i in 1 .. runs:
+      let t0 = epochTime()
+      let (o, c) = execCmdEx(esb & " --minify " & quoteShell(dataFile))
+      esbTotal += epochTime() - t0
+      check c == 0
+      check o.len > 0
+    echo "    esbuild:               " &
+      formatFloat(esbTotal / runs * 1000.0, ffDecimal, 1) & " ms"
